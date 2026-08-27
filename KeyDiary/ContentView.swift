@@ -10,31 +10,80 @@ import SwiftUI
 struct ContentView: View {
     @Bindable var store: KeyDiaryStore
 
+    @Environment(\.dismissWindow) private var dismissWindow
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    @State private var displayMode: KeyboardDisplayMode = .live
     @State private var isShowingCustomRange = false
-    @State private var isShowingClearConfirmation = false
+    @State private var lastLiveKeySummary: String?
 
     var body: some View {
         ZStack {
             stageBackground
 
             KeyboardStage(
-                activeKey: store.activePlaybackKey,
-                activeKeyCode: store.activePlaybackKeyCode,
+                activeKeyDescription: activeKeyDescription,
+                activeKeyCodes: activeKeyCodes,
+                displayMode: displayMode,
                 isPlaying: store.isPlaying,
-                keyCounts: store.filteredKeyCounts
+                keyCounts: displayMode == .statistics ? store.filteredKeyCounts : [:],
+                alignsToTop: false
             )
+            .transaction(value: displayMode) { transaction in
+                transaction.animation = nil
+                transaction.disablesAnimations = true
+            }
             .padding(.horizontal, 34)
-            .padding(.top, 84)
-            .padding(.bottom, 56)
+            .padding(.top, 72)
+            .padding(.bottom, stageBottomPadding)
+            .animation(modeTransitionAnimation, value: stageBottomPadding)
 
             VStack(spacing: 0) {
-                topBar
+                KeyDiaryStatusBar(
+                    store: store,
+                    selection: $displayMode,
+                    showCustomRange: { isShowingCustomRange = true },
+                    openFloatingKeyboard: openFloatingKeyboard
+                )
+
                 Spacer()
-                stageCaption
+
+                if displayMode == .playback {
+                    PlaybackRangeTimeline(store: store)
+                        .frame(maxWidth: .infinity)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+
+                if displayMode != .playback {
+                    HStack {
+                        ModeStatusView(
+                            title: modeStatusTitle,
+                            detail: modeStatusDetail,
+                            systemImage: modeStatusIcon,
+                            tint: modeAccentColor
+                        )
+                        Spacer()
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
             .padding(18)
+            .animation(modeTransitionAnimation, value: displayMode)
         }
         .frame(minWidth: 920, minHeight: 600)
+        .toolbar(removing: .title)
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .onChange(of: displayMode) { _, newMode in
+            if newMode != .playback {
+                store.stopPlayback()
+            }
+        }
+        .onChange(of: store.activeLiveKeySummary) { _, keySummary in
+            if let keySummary {
+                lastLiveKeySummary = keySummary
+            }
+        }
         .sheet(isPresented: $isShowingCustomRange) {
             DateRangeSheet(
                 initialFrom: store.fromDate,
@@ -43,95 +92,18 @@ struct ContentView: View {
                 store.selectCustomRange(from: fromDate, to: toDate)
             }
         }
-        .confirmationDialog(
-            "清除全部记录？",
-            isPresented: $isShowingClearConfirmation
-        ) {
-            Button("清除全部记录", role: .destructive) {
-                store.clearAllRecords()
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("此操作无法撤销，保存在这台 Mac 上的按键记录将被永久删除。")
-        }
-    }
-
-    private var topBar: some View {
-        HStack(spacing: 14) {
-            HStack(spacing: 10) {
-                Image(systemName: "keyboard.fill")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.tint)
-                    .frame(width: 30, height: 30)
-                    .background(.tint.opacity(0.12), in: Circle())
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Key Diary")
-                        .font(.subheadline.weight(.semibold))
-                    recordingStatus
-                }
-            }
-
-            Spacer()
-
-            if store.pressesToday > 0 {
-                Text("今日 \(store.pressesToday.formatted()) 次")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .contentTransition(.numericText())
-            }
-
-            Button {
-                store.isPlaying ? store.stopPlayback() : store.playFilteredRecords()
-            } label: {
-                Image(systemName: store.isPlaying ? "stop.fill" : "play.fill")
-                    .contentTransition(.symbolEffect(.replace))
-                    .frame(width: 16, height: 16)
-            }
-            .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.circle)
-            .help(store.isPlaying ? "停止回放" : "回放当前范围")
-            .disabled(store.filteredRecords.isEmpty && !store.isPlaying)
-
-            SecondaryControlsMenu(
-                store: store,
-                showCustomRange: { isShowingCustomRange = true },
-                requestClearRecords: { isShowingClearConfirmation = true }
+        .alert(item: $store.dataTransferNotice) { notice in
+            Alert(
+                title: Text(notice.title),
+                message: Text(notice.message),
+                dismissButton: .default(Text("好"))
             )
         }
-        .padding(.leading, 10)
-        .padding(.trailing, 8)
-        .padding(.vertical, 8)
-        .background(.regularMaterial, in: Capsule())
-        .overlay {
-            Capsule()
-                .stroke(.separator.opacity(0.45), lineWidth: 1)
-        }
-        .shadow(color: .black.opacity(0.06), radius: 14, y: 6)
     }
 
-    private var recordingStatus: some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 6, height: 6)
-            Text(statusText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private var stageCaption: some View {
-        HStack(spacing: 8) {
-            Image(systemName: store.isPlaying ? "waveform" : "move.3d")
-            Text(stageCaptionText)
-                .contentTransition(.numericText())
-        }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .background(.thinMaterial, in: Capsule())
+    private func openFloatingKeyboard() {
+        openWindow(id: "floating-keyboard")
+        dismissWindow(id: "main")
     }
 
     private var stageBackground: some View {
@@ -155,24 +127,103 @@ struct ContentView: View {
         .ignoresSafeArea()
     }
 
-    private var statusText: String {
-        if !store.hasInputMonitoringPermission { return "需要输入监控权限" }
-        return store.isRecording ? "正在记录" : "记录已暂停"
+    private var modeStatusTitle: String {
+        switch displayMode {
+        case .live:
+            if !store.hasInputMonitoringPermission { return "等待输入监控授权" }
+            return store.isRecording ? "正在实时记录" : "实时记录已暂停"
+        case .statistics:
+            return store.filteredRecordCount == 0 ? "暂无统计数据" : "统计已更新"
+        case .playback:
+            if store.isPlaying { return "正在回放" }
+            return store.playbackRecordCount == 0 ? "所选区间没有可回放记录" : "回放已就绪"
+        }
     }
 
-    private var statusColor: Color {
-        if !store.hasInputMonitoringPermission { return .orange }
-        return store.isRecording ? .green : .secondary
+    private var modeStatusDetail: String {
+        switch displayMode {
+        case .live:
+            if !store.hasInputMonitoringPermission { return "请在设置中完成授权" }
+            if !store.isRecording { return "可在设置中继续记录" }
+            return "最近按键 · \(lastLiveKeySummary ?? "等待输入")"
+        case .statistics:
+            if store.filteredRecordCount == 0 { return "请调整时间或 App 筛选" }
+            return "当前筛选 · \(store.filteredRecordCount.formatted()) 次按键"
+        case .playback:
+            if store.isPlaying { return "当前按键 · \(store.activePlaybackKey ?? "准备中")" }
+            if store.playbackRecordCount == 0 { return "请调整时间轴的起止位置" }
+            return "所选 \(store.playbackRecordCount.formatted()) 条记录 · 预计 \(store.estimatedPlaybackDurationTitle)"
+        }
     }
 
-    private var stageCaptionText: String {
-        if store.isPlaying {
-            return "正在回放 · \(store.activePlaybackKey ?? "准备中")"
+    private var modeStatusIcon: String {
+        switch displayMode {
+        case .live: "bolt.fill"
+        case .statistics: "chart.bar.fill"
+        case .playback: store.isPlaying ? "waveform" : "play.fill"
         }
-        if store.filteredRecords.isEmpty {
-            return "当前范围暂无记录 · 拖动可查看角度"
+    }
+
+    private var modeAccentColor: Color {
+        switch displayMode {
+        case .live: .green
+        case .statistics: .blue
+        case .playback: .orange
         }
-        return "\(store.filteredRecords.count.formatted()) 次按键 · 拖动可查看角度"
+    }
+
+    private var activeKeyDescription: String? {
+        switch displayMode {
+        case .live: store.activeLiveKeySummary
+        case .statistics: nil
+        case .playback: store.activePlaybackKey
+        }
+    }
+
+    private var activeKeyCodes: Set<UInt16> {
+        switch displayMode {
+        case .live: store.activeLiveKeyCodes
+        case .statistics: []
+        case .playback:
+            store.activePlaybackKeyCode.map { Set([$0]) } ?? []
+        }
+    }
+
+    private var stageBottomPadding: CGFloat {
+        return displayMode == .playback ? 200 : 60
+    }
+
+    private var modeTransitionAnimation: Animation? {
+        reduceMotion ? nil : .easeOut(duration: 0.16)
+    }
+}
+
+private struct ModeStatusView: View {
+    let title: String
+    let detail: String
+    let systemImage: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 9) {
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(tint)
+                .contentTransition(.symbolEffect(.replace))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .contentTransition(.numericText())
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

@@ -8,11 +8,18 @@ import ApplicationServices
 
 @MainActor
 final class KeyboardRecorder {
+    private var pressedKeys: [UInt16: String] = [:]
     private var pressedModifierKeyCodes: Set<UInt16> = []
-    private lazy var quartzKeyboardMonitor = QuartzKeyboardMonitor { [weak self] event in
-        self?.handle(event)
-    }
+    private lazy var quartzKeyboardMonitor = QuartzKeyboardMonitor(
+        onEvent: { [weak self] event in
+            self?.handle(event)
+        },
+        onReset: { [weak self] in
+            self?.clearPressedKeys()
+        }
+    )
     var onKeyPress: ((KeyPressRecord) -> Void)?
+    var onPressedKeysChanged: (([UInt16: String]) -> Void)?
 
     var isRunning: Bool { quartzKeyboardMonitor.isRunning }
 
@@ -40,23 +47,41 @@ final class KeyboardRecorder {
 
     func stop() {
         quartzKeyboardMonitor.stop()
-        pressedModifierKeyCodes.removeAll()
+        clearPressedKeys()
     }
 
-    private func handle(_ event: NSEvent) {
+    private func clearPressedKeys() {
+        pressedModifierKeyCodes.removeAll()
+        if !pressedKeys.isEmpty {
+            pressedKeys.removeAll()
+            onPressedKeysChanged?([:])
+        }
+    }
+
+    func handle(_ event: NSEvent) {
         switch event.type {
         case .keyDown:
             // Caps Lock is normalized through flagsChanged below. Ignoring a possible
             // keyDown here prevents a keyboard driver from reporting the same press twice.
             guard event.keyCode != 57 else { return }
-            record(keyCode: event.keyCode, key: KeyCodeResolver.label(for: event))
+            let key = KeyCodeResolver.label(for: event)
+            setPressed(true, keyCode: event.keyCode, key: key)
+            record(keyCode: event.keyCode, key: key)
+
+        case .keyUp:
+            guard event.keyCode != 57 else { return }
+            setPressed(false, keyCode: event.keyCode)
 
         case .flagsChanged:
             handleModifierFlagsChanged(event)
 
         case .systemDefined:
-            guard let key = KeyCodeResolver.systemDefinedKey(for: event) else { return }
-            record(keyCode: key.keyCode, key: key.label)
+            guard let resolvedEvent = KeyCodeResolver.systemDefinedKeyEvent(for: event) else { return }
+            let key = resolvedEvent.key
+            setPressed(resolvedEvent.phase.isPressed, keyCode: key.keyCode, key: key.label)
+            if resolvedEvent.phase.shouldRecord {
+                record(keyCode: key.keyCode, key: key.label)
+            }
 
         default:
             break
@@ -70,23 +95,39 @@ final class KeyboardRecorder {
         // Toggle its tracked state and record only the down transition.
         if keyCode == 57 {
             if pressedModifierKeyCodes.remove(keyCode) != nil {
+                setPressed(false, keyCode: keyCode)
                 return
             }
             pressedModifierKeyCodes.insert(keyCode)
-            record(keyCode: keyCode, key: KeyCodeResolver.label(for: event))
+            let key = KeyCodeResolver.label(for: event)
+            setPressed(true, keyCode: keyCode, key: key)
+            record(keyCode: keyCode, key: key)
             return
         }
 
         guard let flag = KeyCodeResolver.modifierFlag(for: keyCode) else { return }
 
         if pressedModifierKeyCodes.remove(keyCode) != nil {
+            setPressed(false, keyCode: keyCode)
             return
         }
 
         // Ignore a release for a modifier that was already held when recording started.
         guard event.modifierFlags.contains(flag) else { return }
         pressedModifierKeyCodes.insert(keyCode)
-        record(keyCode: keyCode, key: KeyCodeResolver.label(for: event))
+        let key = KeyCodeResolver.label(for: event)
+        setPressed(true, keyCode: keyCode, key: key)
+        record(keyCode: keyCode, key: key)
+    }
+
+    private func setPressed(_ isPressed: Bool, keyCode: UInt16, key: String? = nil) {
+        if isPressed {
+            guard let key, pressedKeys[keyCode] != key else { return }
+            pressedKeys[keyCode] = key
+        } else {
+            guard pressedKeys.removeValue(forKey: keyCode) != nil else { return }
+        }
+        onPressedKeysChanged?(pressedKeys)
     }
 
     private func record(keyCode: UInt16, key: String) {

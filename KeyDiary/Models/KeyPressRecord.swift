@@ -5,7 +5,7 @@
 
 import Foundation
 
-struct KeyPressRecord: Codable, Identifiable, Hashable, Sendable {
+nonisolated struct KeyPressRecord: Codable, Identifiable, Hashable, Sendable {
     let id: UUID
     let timestamp: Date
     let keyCode: UInt16

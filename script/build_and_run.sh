@@ -9,6 +9,10 @@ BUILD_DIR="$(pwd)/.build"
 APP_BUNDLE="$BUILD_DIR/Build/Products/Debug/$APP_NAME.app"
 BUNDLE_ID="com.MrSouthWall.KeyDiary"
 
+if [[ -z "${DEVELOPER_DIR:-}" && -d "/Applications/Xcode-beta.app/Contents/Developer" ]]; then
+  export DEVELOPER_DIR="/Applications/Xcode-beta.app/Contents/Developer"
+fi
+
 pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 
 xcodebuild \
@@ -16,6 +20,7 @@ xcodebuild \
   -scheme "$SCHEME" \
   -configuration Debug \
   -derivedDataPath "$BUILD_DIR" \
+  -clonedSourcePackagesDirPath "$BUILD_DIR/SourcePackages" \
   build
 
 open_app() {

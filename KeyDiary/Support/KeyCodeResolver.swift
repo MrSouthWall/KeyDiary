@@ -6,9 +6,23 @@
 import AppKit
 
 enum KeyCodeResolver {
+    enum KeyEventPhase: Equatable {
+        case down
+        case repeated
+        case up
+
+        var isPressed: Bool { self != .up }
+        var shouldRecord: Bool { self != .up }
+    }
+
     struct ResolvedKey {
         let keyCode: UInt16
         let label: String
+    }
+
+    struct ResolvedSystemKeyEvent {
+        let key: ResolvedKey
+        let phase: KeyEventPhase
     }
 
     static func label(for event: NSEvent) -> String {
@@ -31,7 +45,7 @@ enum KeyCodeResolver {
         }
     }
 
-    static func systemDefinedKey(for event: NSEvent) -> ResolvedKey? {
+    static func systemDefinedKeyEvent(for event: NSEvent) -> ResolvedSystemKeyEvent? {
         guard event.type == .systemDefined else { return nil }
 
         // NX_SUBTYPE_AUX_CONTROL_BUTTONS. data1 packs the special-key identifier in
@@ -41,10 +55,16 @@ enum KeyCodeResolver {
         let systemKeyCode = Int((data >> 16) & 0xFFFF)
         let state = Int((data >> 8) & 0xFF)
 
-        // 0xA is key down and 0xC is key repeat. 0xB is key up.
-        guard state == 0xA || state == 0xC else { return nil }
+        let phase: KeyEventPhase
+        switch state {
+        case 0xA: phase = .down
+        case 0xB: phase = .up
+        case 0xC: phase = .repeated
+        default: return nil
+        }
 
-        return systemKeyMap[systemKeyCode]
+        guard let key = systemKeyMap[systemKeyCode] else { return nil }
+        return ResolvedSystemKeyEvent(key: key, phase: phase)
     }
 
     private static let specialKeys: [UInt16: String] = [

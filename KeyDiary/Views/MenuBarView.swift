@@ -13,16 +13,6 @@ struct MenuBarView: View {
     var body: some View {
         Text(statusText)
 
-        if store.hasInputMonitoringPermission {
-            Button(store.isRecording ? "暂停记录" : "继续记录") {
-                store.isRecording ? store.stopRecording() : store.startRecording()
-            }
-        } else {
-            Button("授权输入监控…") {
-                store.requestAccessAndStart()
-            }
-        }
-
         Divider()
 
         Text("今日已记录 \(store.pressesToday) 次按键")
@@ -35,6 +25,17 @@ struct MenuBarView: View {
             openWindow(id: "main")
         }
         .keyboardShortcut("o")
+
+        Button {
+            openWindow(id: "data-editor")
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        } label: {
+            Label("筛选与编辑数据…", systemImage: "tablecells")
+        }
+
+        SettingsLink {
+            Label("设置…", systemImage: "gearshape")
+        }
 
         Divider()
 

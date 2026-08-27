@@ -16,11 +16,33 @@ private extension EnvironmentValues {
     }
 }
 
+private enum KeyboardMetrics {
+    static let deckHeight: CGFloat = 420
+    static let deckCornerRadius: CGFloat = 30
+    static let deckInset: CGFloat = 12
+    static let keyCornerRadius: CGFloat = 7
+    static let exteriorKeyCornerRadius = deckCornerRadius - deckInset
+    static let keySpacing: CGFloat = 8
+    static let rowSpacing: CGFloat = 8
+    static let rowCount: CGFloat = 6
+    static let keyHeight = (deckHeight - deckInset * 2 - rowSpacing * (rowCount - 1)) / rowCount
+    static let keyDepth: CGFloat = 5
+    static let pressedKeyDepth: CGFloat = 2
+    static let keyShadowRadius: CGFloat = 2
+    static let pressedKeyShadowRadius: CGFloat = 7
+    static let keyShadowOffset: CGFloat = 3
+    static let pressedKeyShadowOffset: CGFloat = 1
+    static let pressedKeyOffset: CGFloat = 3
+    static let arrowKeySpacing: CGFloat = 3
+}
+
 struct KeyboardStage: View {
-    let activeKey: String?
-    let activeKeyCode: UInt16?
+    let activeKeyDescription: String?
+    let activeKeyCodes: Set<UInt16>
+    let displayMode: KeyboardDisplayMode
     let isPlaying: Bool
     let keyCounts: [UInt16: Int]
+    let alignsToTop: Bool
 
     @State private var rotation = CGSize(width: -1.5, height: 7)
 
@@ -31,9 +53,10 @@ struct KeyboardStage: View {
             let scale = max(0.01, min(proxy.size.width / 1_072, proxy.size.height / 470))
             let modelWidth = 1_048 * scale
             let modelHeight = 438 * scale
+            let modelCenterY = alignsToTop ? modelHeight / 2 + 8 : proxy.size.height / 2 + 8
 
             KeyboardModel(
-                activeKeyCode: activeKeyCode,
+                activeKeyCodes: activeKeyCodes,
                 keyCounts: keyCounts,
                 maximumCount: maximumCount
             )
@@ -41,7 +64,7 @@ struct KeyboardStage: View {
             .frame(width: modelWidth, height: modelHeight)
             .rotation3DEffect(.degrees(rotation.height), axis: (x: 1, y: 0, z: 0), perspective: 0.42)
             .rotation3DEffect(.degrees(rotation.width), axis: (x: 0, y: 1, z: 0), perspective: 0.32)
-            .position(x: proxy.size.width / 2, y: proxy.size.height / 2 + 8)
+            .position(x: proxy.size.width / 2, y: modelCenterY)
             .contentShape(Rectangle())
             .simultaneousGesture(
                 DragGesture(minimumDistance: 5)
@@ -56,13 +79,32 @@ struct KeyboardStage: View {
                     }
             )
         }
-        .accessibilityLabel("3D 键盘热力图")
-        .accessibilityValue(isPlaying ? "正在回放 \(activeKey ?? "")" : "峰值 \(maximumCount) 次")
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(accessibilityValue)
+    }
+
+    private var accessibilityLabel: String {
+        switch displayMode {
+        case .live: "实时 3D 键盘"
+        case .statistics: "3D 键盘统计热力图"
+        case .playback: "3D 键盘回放"
+        }
+    }
+
+    private var accessibilityValue: String {
+        switch displayMode {
+        case .live:
+            activeKeyDescription.map { "当前按键 \($0)" } ?? "等待按键"
+        case .statistics:
+            "峰值 \(maximumCount) 次"
+        case .playback:
+            isPlaying ? "正在回放 \(activeKeyDescription ?? "")" : "回放已停止"
+        }
     }
 }
 
 private struct KeyboardModel: View {
-    let activeKeyCode: UInt16?
+    let activeKeyCodes: Set<UInt16>
     let keyCounts: [UInt16: Int]
     let maximumCount: Int
     @Environment(\.keyboardRenderScale) private var renderScale
@@ -70,11 +112,11 @@ private struct KeyboardModel: View {
     var body: some View {
         VStack(spacing: 0) {
             KeyboardDeck(
-                activeKeyCode: activeKeyCode,
+                activeKeyCodes: activeKeyCodes,
                 keyCounts: keyCounts,
                 maximumCount: maximumCount
             )
-            .frame(height: 420 * renderScale)
+            .frame(height: KeyboardMetrics.deckHeight * renderScale)
 
             Capsule()
                 .fill(.black.opacity(0.25))
@@ -86,14 +128,14 @@ private struct KeyboardModel: View {
 }
 
 private struct KeyboardDeck: View {
-    let activeKeyCode: UInt16?
+    let activeKeyCodes: Set<UInt16>
     let keyCounts: [UInt16: Int]
     let maximumCount: Int
     @Environment(\.keyboardRenderScale) private var renderScale
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 30 * renderScale, style: .continuous)
+            RoundedRectangle(cornerRadius: KeyboardMetrics.deckCornerRadius * renderScale, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [
@@ -106,24 +148,24 @@ private struct KeyboardDeck: View {
                     )
                 )
                 .overlay {
-                    RoundedRectangle(cornerRadius: 30 * renderScale, style: .continuous)
+                    RoundedRectangle(cornerRadius: KeyboardMetrics.deckCornerRadius * renderScale, style: .continuous)
                         .stroke(.white.opacity(0.72), lineWidth: 1.2 * renderScale)
                         .padding(renderScale)
                 }
                 .shadow(color: .black.opacity(0.28), radius: 2 * renderScale, y: 5 * renderScale)
 
-            VStack(spacing: 7 * renderScale) {
-                ForEach(Array(KeyboardLayout.rows.enumerated()), id: \.offset) { index, row in
+            VStack(spacing: KeyboardMetrics.rowSpacing * renderScale) {
+                ForEach(Array(KeyboardLayout.rows.enumerated()), id: \.offset) { _, row in
                     KeyboardRowView(
                         keys: row,
-                        height: CGFloat(index == 0 ? 52 : 61) * renderScale,
-                        activeKeyCode: activeKeyCode,
+                        height: KeyboardMetrics.keyHeight * renderScale,
+                        activeKeyCodes: activeKeyCodes,
                         keyCounts: keyCounts,
                         maximumCount: maximumCount
                     )
                 }
             }
-            .padding(12 * renderScale)
+            .padding(KeyboardMetrics.deckInset * renderScale)
         }
     }
 }
@@ -131,14 +173,14 @@ private struct KeyboardDeck: View {
 private struct KeyboardRowView: View {
     let keys: [KeyboardKey]
     let height: CGFloat
-    let activeKeyCode: UInt16?
+    let activeKeyCodes: Set<UInt16>
     let keyCounts: [UInt16: Int]
     let maximumCount: Int
     @Environment(\.keyboardRenderScale) private var renderScale
 
     var body: some View {
         GeometryReader { proxy in
-            let gap: CGFloat = 7 * renderScale
+            let gap = KeyboardMetrics.keySpacing * renderScale
             let totalUnits = keys.reduce(0) { $0 + $1.width }
             let unit = (proxy.size.width - gap * CGFloat(keys.count - 1)) / totalUnits
 
@@ -151,14 +193,14 @@ private struct KeyboardRowView: View {
                                 pairedKeyCode: pairedKeyCode,
                                 keyCounts: keyCounts,
                                 maximumCount: maximumCount,
-                                activeKeyCode: activeKeyCode
+                                activeKeyCodes: activeKeyCodes
                             )
                         } else {
                             KeyboardKeyButton(
                                 key: key,
                                 count: key.keyCode.map { keyCounts[$0, default: 0] } ?? 0,
                                 maximumCount: maximumCount,
-                                isActive: key.keyCode.map { $0 == activeKeyCode } ?? false
+                                isActive: key.keyCode.map(activeKeyCodes.contains) ?? false
                             )
                         }
                     }
@@ -175,7 +217,7 @@ private struct ArrowKeyPair: View {
     let pairedKeyCode: UInt16
     let keyCounts: [UInt16: Int]
     let maximumCount: Int
-    let activeKeyCode: UInt16?
+    let activeKeyCodes: Set<UInt16>
     @Environment(\.keyboardRenderScale) private var renderScale
 
     private var downKey: KeyboardKey {
@@ -188,20 +230,113 @@ private struct ArrowKeyPair: View {
     }
 
     var body: some View {
-        VStack(spacing: 3 * renderScale) {
-            KeyboardKeyButton(
-                key: key,
-                count: key.keyCode.map { keyCounts[$0, default: 0] } ?? 0,
-                maximumCount: maximumCount,
-                isActive: key.keyCode.map { $0 == activeKeyCode } ?? false
-            )
-            KeyboardKeyButton(
-                key: downKey,
-                count: keyCounts[pairedKeyCode, default: 0],
-                maximumCount: maximumCount,
-                isActive: pairedKeyCode == activeKeyCode
-            )
+        GeometryReader { proxy in
+            let spacing = KeyboardMetrics.arrowKeySpacing * renderScale
+            let arrowKeyHeight = (proxy.size.height - spacing) / 2
+
+            VStack(spacing: spacing) {
+                ArrowKeyHalfButton(
+                    key: key,
+                    count: key.keyCode.map { keyCounts[$0, default: 0] } ?? 0,
+                    maximumCount: maximumCount,
+                    isActive: key.keyCode.map(activeKeyCodes.contains) ?? false
+                )
+                .frame(maxWidth: .infinity)
+                .frame(height: arrowKeyHeight)
+
+                ArrowKeyHalfButton(
+                    key: downKey,
+                    count: keyCounts[pairedKeyCode, default: 0],
+                    maximumCount: maximumCount,
+                    isActive: activeKeyCodes.contains(pairedKeyCode)
+                )
+                .frame(maxWidth: .infinity)
+                .frame(height: arrowKeyHeight)
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
+    }
+}
+
+private struct ArrowKeyHalfButton: View {
+    let key: KeyboardKey
+    let count: Int
+    let maximumCount: Int
+    let isActive: Bool
+
+    var body: some View {
+        Button(action: {}) {
+            KeyFace(key: key, count: count, isCompact: true)
+        }
+        .buttonStyle(ArrowKeyHalfStyle(isActive: isActive, heat: heat))
+        .help(count == 0 ? key.accessibilityName : "\(key.accessibilityName)：\(count) 次")
+        .accessibilityLabel(key.accessibilityName)
+        .accessibilityValue("\(count) 次")
+    }
+
+    private var heat: Double {
+        guard count > 0, maximumCount > 0 else { return 0 }
+        return log(Double(count) + 1) / log(Double(maximumCount) + 1)
+    }
+}
+
+private struct ArrowKeyHalfStyle: ButtonStyle {
+    let isActive: Bool
+    let heat: Double
+    @Environment(\.keyboardRenderScale) private var renderScale
+
+    func makeBody(configuration: Configuration) -> some View {
+        let pressed = configuration.isPressed || isActive
+        let cornerRadius = KeyboardMetrics.keyCornerRadius * renderScale
+
+        configuration.label
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background {
+                ZStack {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(pressed ? Color(red: 0.72, green: 0.27, blue: 0.02) : Color.black.opacity(0.38))
+                        .offset(
+                            y: (pressed ? KeyboardMetrics.pressedKeyDepth : KeyboardMetrics.keyDepth) * renderScale
+                        )
+
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: pressed
+                                    ? [Color(red: 1.0, green: 0.62, blue: 0.16), Color(red: 0.95, green: 0.34, blue: 0.04)]
+                                    : [Color(white: 1.0), Color(white: 0.9)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .overlay {
+                            if !pressed, heat > 0 {
+                                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                                    .fill(Color.orange.opacity(0.1 + heat * 0.34))
+                            }
+                        }
+                        .overlay {
+                            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                                .stroke(
+                                    pressed ? Color.orange.opacity(0.9) : .black.opacity(0.3),
+                                    lineWidth: renderScale
+                                )
+                        }
+                        .shadow(
+                            color: pressed ? Color.orange.opacity(0.34) : .black.opacity(0.18),
+                            radius: (pressed
+                                ? KeyboardMetrics.pressedKeyShadowRadius
+                                : KeyboardMetrics.keyShadowRadius) * renderScale,
+                            y: (pressed
+                                ? KeyboardMetrics.pressedKeyShadowOffset
+                                : KeyboardMetrics.keyShadowOffset) * renderScale
+                        )
+                }
+            }
+            .foregroundStyle(pressed ? Color.white : Color.black.opacity(0.68))
+            .contentShape(Rectangle())
+            .offset(y: pressed ? KeyboardMetrics.pressedKeyOffset * renderScale : 0)
+            .animation(.spring(response: 0.14, dampingFraction: 0.6), value: pressed)
     }
 }
 
@@ -215,7 +350,13 @@ private struct KeyboardKeyButton: View {
         Button(action: {}) {
             KeyFace(key: key, count: count)
         }
-        .buttonStyle(ThreeDimensionalKeyStyle(isActive: isActive, heat: heat))
+        .buttonStyle(
+            ThreeDimensionalKeyStyle(
+                isActive: isActive,
+                heat: heat,
+                exteriorCorner: key.exteriorCorner
+            )
+        )
         .help(count == 0 ? key.accessibilityName : "\(key.accessibilityName)：\(count) 次")
         .accessibilityLabel(key.accessibilityName)
         .accessibilityValue("\(count) 次")
@@ -230,7 +371,14 @@ private struct KeyboardKeyButton: View {
 private struct KeyFace: View {
     let key: KeyboardKey
     let count: Int
+    let isCompact: Bool
     @Environment(\.keyboardRenderScale) private var renderScale
+
+    init(key: KeyboardKey, count: Int, isCompact: Bool = false) {
+        self.key = key
+        self.count = count
+        self.isCompact = isCompact
+    }
 
     var body: some View {
         ZStack {
@@ -239,13 +387,16 @@ private struct KeyFace: View {
 
             if count > 0 {
                 Text(compactCount)
-                    .font(.system(size: 8 * renderScale, weight: .bold, design: .rounded).monospacedDigit())
+                    .font(.system(size: (isCompact ? 6.5 : 8) * renderScale, weight: .bold, design: .rounded).monospacedDigit())
                     .foregroundStyle(.orange)
-                    .padding(.horizontal, 4 * renderScale)
-                    .frame(minWidth: 15 * renderScale, minHeight: 15 * renderScale)
+                    .padding(.horizontal, (isCompact ? 2.5 : 4) * renderScale)
+                    .frame(
+                        minWidth: (isCompact ? 11 : 15) * renderScale,
+                        minHeight: (isCompact ? 11 : 15) * renderScale
+                    )
                     .background(.background.opacity(0.82), in: Capsule())
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: key.countCorner.alignment)
-                    .padding(3 * renderScale)
+                    .padding((isCompact ? 1 : 3) * renderScale)
             }
         }
     }
@@ -258,11 +409,15 @@ private struct KeyFace: View {
                 Text(key.primary)
                     .font(.system(size: 16 * renderScale, weight: .regular, design: .rounded))
                     .minimumScaleFactor(0.52)
-                    .lineLimit(2)
+                    .lineLimit(1)
+                    .multilineTextAlignment(.center)
+                    .frame(height: 19 * renderScale)
                 if let secondary = key.secondary {
                     Text(secondary)
                         .font(.system(size: 8.5 * renderScale, weight: .medium, design: .rounded))
                         .lineLimit(1)
+                        .multilineTextAlignment(.center)
+                        .frame(height: 11 * renderScale)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -270,26 +425,35 @@ private struct KeyFace: View {
         case .function:
             VStack(spacing: 3 * renderScale) {
                 symbol(size: 11.5 * renderScale)
+                    .frame(width: 22 * renderScale, height: 16 * renderScale)
                 if let secondary = key.secondary {
                     Text(secondary)
                         .font(.system(size: 8 * renderScale, weight: .medium, design: .rounded))
+                        .lineLimit(1)
+                        .frame(height: 10 * renderScale)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
         case .symbol(let corner):
-            symbol(size: (key.isFunction ? 11.5 : 14) * renderScale)
+            symbol(size: (isCompact ? 9.5 : (key.isFunction ? 11.5 : 14)) * renderScale)
+                .frame(
+                    width: (isCompact ? 12 : 20) * renderScale,
+                    height: (isCompact ? 12 : 20) * renderScale
+                )
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: corner.alignment)
                 .padding(keyContentInsets)
 
         case .modifier(let iconCorner, let labelCorner):
             symbol(size: 14 * renderScale)
+                .frame(width: 18 * renderScale, height: 18 * renderScale)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: iconCorner.alignment)
                 .padding(keyContentInsets)
             if let secondary = key.secondary {
                 Text(secondary)
                     .font(.system(size: 8.5 * renderScale, weight: .medium, design: .rounded))
                     .lineLimit(1)
+                    .frame(height: 11 * renderScale)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: labelCorner.alignment)
                     .padding(keyContentInsets)
             }
@@ -297,11 +461,15 @@ private struct KeyFace: View {
         case .cornerText(let primaryCorner, let secondaryCorner):
             Text(key.primary)
                 .font(.system(size: (key.isFunction ? 9.5 : 12) * renderScale, weight: .regular, design: .rounded))
+                .lineLimit(1)
+                .frame(height: (key.isFunction ? 12 : 16) * renderScale)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: primaryCorner.alignment)
                 .padding(keyContentInsets)
             if let secondary = key.secondary {
                 Text(secondary)
                     .font(.system(size: 8.5 * renderScale, weight: .medium, design: .rounded))
+                    .lineLimit(1)
+                    .frame(height: 11 * renderScale)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: secondaryCorner.alignment)
                     .padding(keyContentInsets)
             }
@@ -319,10 +487,10 @@ private struct KeyFace: View {
 
     private var keyContentInsets: EdgeInsets {
         EdgeInsets(
-            top: 7 * renderScale,
-            leading: 9 * renderScale,
-            bottom: 7 * renderScale,
-            trailing: 9 * renderScale
+            top: (isCompact ? 1 : 7) * renderScale,
+            leading: (isCompact ? 3 : 9) * renderScale,
+            bottom: (isCompact ? 1 : 7) * renderScale,
+            trailing: (isCompact ? 3 : 9) * renderScale
         )
     }
 
@@ -336,19 +504,23 @@ private struct KeyFace: View {
 private struct ThreeDimensionalKeyStyle: ButtonStyle {
     let isActive: Bool
     let heat: Double
+    let exteriorCorner: KeyCorner?
     @Environment(\.keyboardRenderScale) private var renderScale
 
     func makeBody(configuration: Configuration) -> some View {
         let pressed = configuration.isPressed || isActive
+        let cornerRadii = keyCornerRadii
 
         configuration.label
             .background {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 7 * renderScale, style: .continuous)
+                    UnevenRoundedRectangle(cornerRadii: cornerRadii, style: .continuous)
                         .fill(pressed ? Color(red: 0.72, green: 0.27, blue: 0.02) : Color.black.opacity(0.38))
-                        .offset(y: (pressed ? 2 : 5) * renderScale)
+                        .offset(
+                            y: (pressed ? KeyboardMetrics.pressedKeyDepth : KeyboardMetrics.keyDepth) * renderScale
+                        )
 
-                    RoundedRectangle(cornerRadius: 7 * renderScale, style: .continuous)
+                    UnevenRoundedRectangle(cornerRadii: cornerRadii, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: pressed
@@ -360,12 +532,12 @@ private struct ThreeDimensionalKeyStyle: ButtonStyle {
                         )
                         .overlay {
                             if !pressed, heat > 0 {
-                                RoundedRectangle(cornerRadius: 7 * renderScale, style: .continuous)
+                                UnevenRoundedRectangle(cornerRadii: cornerRadii, style: .continuous)
                                     .fill(Color.orange.opacity(0.1 + heat * 0.34))
                             }
                         }
                         .overlay {
-                            RoundedRectangle(cornerRadius: 7 * renderScale, style: .continuous)
+                            UnevenRoundedRectangle(cornerRadii: cornerRadii, style: .continuous)
                                 .stroke(
                                     pressed ? Color.orange.opacity(0.9) : .black.opacity(0.3),
                                     lineWidth: renderScale
@@ -373,14 +545,30 @@ private struct ThreeDimensionalKeyStyle: ButtonStyle {
                         }
                         .shadow(
                             color: pressed ? Color.orange.opacity(0.34) : .black.opacity(0.18),
-                            radius: (pressed ? 7 : 2) * renderScale,
-                            y: (pressed ? 1 : 3) * renderScale
+                            radius: (pressed
+                                ? KeyboardMetrics.pressedKeyShadowRadius
+                                : KeyboardMetrics.keyShadowRadius) * renderScale,
+                            y: (pressed
+                                ? KeyboardMetrics.pressedKeyShadowOffset
+                                : KeyboardMetrics.keyShadowOffset) * renderScale
                         )
                 }
             }
-            .foregroundStyle(pressed ? Color.white : Color.primary.opacity(0.68))
-            .offset(y: pressed ? 3 * renderScale : 0)
+            .foregroundStyle(pressed ? Color.white : Color.black.opacity(0.68))
+            .offset(y: pressed ? KeyboardMetrics.pressedKeyOffset * renderScale : 0)
             .animation(.spring(response: 0.14, dampingFraction: 0.6), value: pressed)
+    }
+
+    private var keyCornerRadii: RectangleCornerRadii {
+        let regular = KeyboardMetrics.keyCornerRadius * renderScale
+        let exterior = KeyboardMetrics.exteriorKeyCornerRadius * renderScale
+
+        return RectangleCornerRadii(
+            topLeading: exteriorCorner == .topLeading ? exterior : regular,
+            bottomLeading: exteriorCorner == .bottomLeading ? exterior : regular,
+            bottomTrailing: exteriorCorner == .bottomTrailing ? exterior : regular,
+            topTrailing: exteriorCorner == .topTrailing ? exterior : regular
+        )
     }
 }
 
@@ -395,6 +583,7 @@ private struct KeyboardKey: Identifiable {
     let width: CGFloat
     let isFunction: Bool
     let pairedKeyCode: UInt16?
+    let exteriorCorner: KeyCorner?
 
     init(
         _ id: String,
@@ -406,7 +595,8 @@ private struct KeyboardKey: Identifiable {
         countCorner: KeyCorner = .topTrailing,
         width: CGFloat = 1,
         function: Bool = false,
-        pairedCode: UInt16? = nil
+        pairedCode: UInt16? = nil,
+        exteriorCorner: KeyCorner? = nil
     ) {
         self.id = id
         self.keyCode = code
@@ -418,6 +608,7 @@ private struct KeyboardKey: Identifiable {
         self.width = width
         self.isFunction = function
         self.pairedKeyCode = pairedCode
+        self.exteriorCorner = exteriorCorner
     }
 
     var accessibilityName: String {
@@ -435,7 +626,7 @@ private enum KeyFaceStyle {
     case cornerText(primary: KeyCorner, secondary: KeyCorner)
 }
 
-private enum KeyCorner {
+private enum KeyCorner: Equatable {
     case topLeading
     case top
     case topTrailing
@@ -467,7 +658,7 @@ private enum KeyboardLayout {
 
     static let rows: [[KeyboardKey]] = [
         [
-            .init("esc", code: 53, "esc", face: .cornerText(primary: .bottomLeading, secondary: .bottomLeading), width: 1.55, function: true),
+            .init("esc", code: 53, "esc", face: .cornerText(primary: .bottomLeading, secondary: .bottomLeading), width: 1.55, function: true, exteriorCorner: .topLeading),
             .init("f1", code: 122, secondary: "F1", symbol: "sun.min", face: .function, function: true),
             .init("f2", code: 120, secondary: "F2", symbol: "sun.max", face: .function, function: true),
             .init("f3", code: 99, secondary: "F3", symbol: "rectangle.grid.2x2", face: .function, function: true),
@@ -480,7 +671,7 @@ private enum KeyboardLayout {
             .init("f10", code: 109, secondary: "F10", symbol: "speaker.slash.fill", face: .function, function: true),
             .init("f11", code: 103, secondary: "F11", symbol: "speaker.wave.1.fill", face: .function, function: true),
             .init("f12", code: 111, secondary: "F12", symbol: "speaker.wave.3.fill", face: .function, function: true),
-            .init("lock", code: displayOnlyLockKeyCode, symbol: "lock.fill", face: .symbol(.center), width: 1.02, function: true)
+            .init("lock", code: displayOnlyLockKeyCode, symbol: "lock.fill", face: .symbol(.center), width: 1.02, function: true, exteriorCorner: .topTrailing)
         ],
         [
             .init("grave", code: 50, "~", secondary: "`"),
@@ -517,7 +708,7 @@ private enum KeyboardLayout {
             .init("rightShift", code: 60, symbol: "shift", face: .symbol(.bottomTrailing), width: 2.25)
         ],
         [
-            .init("globe", code: 63, symbol: "globe", face: .symbol(.bottomLeading)),
+            .init("globe", code: 63, symbol: "globe", face: .symbol(.bottomLeading), exteriorCorner: .bottomLeading),
             .init("leftControl", code: 59, secondary: "control", symbol: "control", face: .modifier(icon: .topLeading, label: .bottomLeading), width: 1.18),
             .init("leftOption", code: 58, secondary: "option", symbol: "option", face: .modifier(icon: .topLeading, label: .bottomLeading), width: 1.18),
             .init("leftCommand", code: 55, secondary: "command", symbol: "command", face: .modifier(icon: .topTrailing, label: .bottomLeading), countCorner: .topLeading, width: 1.35),
@@ -526,7 +717,7 @@ private enum KeyboardLayout {
             .init("rightOption", code: 61, secondary: "option", symbol: "option", face: .modifier(icon: .topTrailing, label: .bottomLeading), width: 1.18),
             .init("left", code: 123, symbol: "arrowtriangle.left.fill", face: .symbol(.center)),
             .init("upDown", code: 126, symbol: "arrowtriangle.up.fill", face: .symbol(.center), pairedCode: 125),
-            .init("right", code: 124, symbol: "arrowtriangle.right.fill", face: .symbol(.center))
+            .init("right", code: 124, symbol: "arrowtriangle.right.fill", face: .symbol(.center), exteriorCorner: .bottomTrailing)
         ]
     ]
 }

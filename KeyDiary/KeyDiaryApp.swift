@@ -18,6 +18,27 @@ struct KeyDiaryApp: App {
         }
         .defaultSize(width: 1_180, height: 760)
         .defaultLaunchBehavior(.presented)
+        .commands {
+            DataEditorCommands()
+        }
+
+        Window("实时悬浮键盘", id: "floating-keyboard") {
+            FloatingKeyboardView(store: appDelegate.store)
+        }
+        .defaultSize(width: 900, height: 430)
+        .windowStyle(.plain)
+        .restorationBehavior(.disabled)
+        .defaultLaunchBehavior(.suppressed)
+
+        Window("数据编辑", id: "data-editor") {
+            DataEditorView(store: appDelegate.store)
+        }
+        .defaultSize(width: 1_180, height: 720)
+        .defaultLaunchBehavior(.suppressed)
+
+        Settings {
+            KeyDiarySettingsView(store: appDelegate.store)
+        }
 
         MenuBarExtra {
             MenuBarView(store: appDelegate.store)

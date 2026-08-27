@@ -12,6 +12,7 @@ final class QuartzKeyboardMonitor {
     private static let systemDefinedEventType = CGEventType(rawValue: 14)!
     private static let hidEventMask: CGEventMask = [
         CGEventType.keyDown,
+        CGEventType.keyUp,
         CGEventType.flagsChanged
     ].reduce(into: CGEventMask(0)) { mask, type in
         mask |= CGEventMask(1) << type.rawValue
@@ -37,9 +38,14 @@ final class QuartzKeyboardMonitor {
     private var keyboardTap: TapState?
     private var systemKeyTap: TapState?
     private let onEvent: (NSEvent) -> Void
+    private let onReset: () -> Void
 
-    init(onEvent: @escaping (NSEvent) -> Void) {
+    init(
+        onEvent: @escaping (NSEvent) -> Void,
+        onReset: @escaping () -> Void = {}
+    ) {
         self.onEvent = onEvent
+        self.onReset = onReset
     }
 
     var isRunning: Bool {
@@ -118,6 +124,9 @@ final class QuartzKeyboardMonitor {
     }
 
     private func reenableAfterSystemDisable() {
+        // A disabled event tap may have missed key-up events. Resetting prevents
+        // the real-time keyboard from leaving keys visually stuck down.
+        onReset()
         if let keyboardTap {
             CGEvent.tapEnable(tap: keyboardTap.port, enable: true)
         }
