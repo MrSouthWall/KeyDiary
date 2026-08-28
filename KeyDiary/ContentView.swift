@@ -31,7 +31,8 @@ struct ContentView: View {
                 isPlaying: stageIsPlaying,
                 keyCounts: displayMode == .statistics ? store.filteredKeyCounts : [:],
                 alignsToTop: false,
-                pixelFrame: displayMode == .cinema ? videoPlayer.pixelFrame : nil
+                pixelFrame: displayMode == .cinema ? videoPlayer.pixelFrame : nil,
+                pixelColorMode: displayMode == .cinema ? videoPlayer.colorMode : nil
             )
             .transaction(value: displayMode) { transaction in
                 transaction.animation = nil

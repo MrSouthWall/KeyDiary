@@ -30,7 +30,8 @@ struct FloatingKeyboardView: View {
                 isPlaying: false,
                 keyCounts: [:],
                 alignsToTop: false,
-                pixelFrame: nil
+                pixelFrame: nil,
+                pixelColorMode: nil
             )
             .offset(y: -8)
             .padding(12)

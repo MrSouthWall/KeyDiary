@@ -31,7 +31,8 @@ struct KeyboardCinemaVideoFrame: View {
                 isPlaying: true,
                 keyCounts: [:],
                 alignsToTop: false,
-                pixelFrame: pixelFrame
+                pixelFrame: pixelFrame,
+                pixelColorMode: colorMode
             )
             .padding(.horizontal, 72)
             .padding(.top, 128)

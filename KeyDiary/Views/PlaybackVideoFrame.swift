@@ -27,7 +27,8 @@ struct PlaybackVideoFrame: View {
                 isPlaying: activeRecord != nil,
                 keyCounts: [:],
                 alignsToTop: false,
-                pixelFrame: nil
+                pixelFrame: nil,
+                pixelColorMode: nil
             )
             .padding(.horizontal, 72)
             .padding(.top, 128)

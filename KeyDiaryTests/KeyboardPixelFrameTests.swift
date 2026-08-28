@@ -150,8 +150,9 @@ final class KeyboardPixelFrameTests: XCTestCase {
         let whiteKeycap = KeyboardPixel(red: 1, green: 1, blue: 1).keycapColor
         let redKeycap = KeyboardPixel(red: 1, green: 0, blue: 0).keycapColor
 
-        XCTAssertGreaterThan(blackKeycap.luminance, 0)
-        XCTAssertLessThan(whiteKeycap.luminance, 1)
+        XCTAssertLessThanOrEqual(blackKeycap.luminance, 0.05)
+        XCTAssertGreaterThanOrEqual(whiteKeycap.luminance, 0.95)
+        XCTAssertGreaterThan(whiteKeycap.luminance - blackKeycap.luminance, 0.9)
         XCTAssertGreaterThan(redKeycap.red, redKeycap.green)
         XCTAssertGreaterThan(redKeycap.red, redKeycap.blue)
     }

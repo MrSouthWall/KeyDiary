@@ -9,10 +9,19 @@ private struct KeyboardRenderScaleKey: EnvironmentKey {
     static let defaultValue: CGFloat = 1
 }
 
+private struct KeyboardPixelColorModeKey: EnvironmentKey {
+    static let defaultValue: KeyboardPixelColorMode? = nil
+}
+
 private extension EnvironmentValues {
     var keyboardRenderScale: CGFloat {
         get { self[KeyboardRenderScaleKey.self] }
         set { self[KeyboardRenderScaleKey.self] = newValue }
+    }
+
+    var keyboardPixelColorMode: KeyboardPixelColorMode? {
+        get { self[KeyboardPixelColorModeKey.self] }
+        set { self[KeyboardPixelColorModeKey.self] = newValue }
     }
 }
 
@@ -40,6 +49,75 @@ private extension KeyboardPixel {
     var swiftUIColor: Color {
         Color(red: red, green: green, blue: blue)
     }
+
+    var keycapGradientColors: [Color] {
+        let highlight = KeyboardPixel(
+            red: red * 1.1 + 0.015,
+            green: green * 1.1 + 0.015,
+            blue: blue * 1.1 + 0.015
+        )
+        let shade = KeyboardPixel(
+            red: red * 0.84,
+            green: green * 0.84,
+            blue: blue * 0.84
+        )
+
+        return [highlight.swiftUIColor, shade.swiftUIColor]
+    }
+}
+
+private func keyboardKeycapGradient(
+    pressed: Bool,
+    pixelColor: KeyboardPixel?,
+    themeColor: Color,
+    colorScheme: ColorScheme
+) -> LinearGradient {
+    let colors: [Color]
+    if pressed {
+        colors = [themeColor.opacity(0.78), themeColor]
+    } else if let pixelColor {
+        colors = pixelColor.keycapGradientColors
+    } else if colorScheme == .dark {
+        colors = [Color(white: 0.16), Color(white: 0.09)]
+    } else {
+        colors = [Color(white: 1), Color(white: 0.9)]
+    }
+
+    return LinearGradient(
+        colors: colors,
+        startPoint: .top,
+        endPoint: .bottom
+    )
+}
+
+private func keyboardKeycapColorScheme(
+    pixelColor: KeyboardPixel?,
+    pixelColorMode: KeyboardPixelColorMode?,
+    fallback: ColorScheme
+) -> ColorScheme {
+    guard pixelColorMode == .binary, let pixelColor else { return fallback }
+    return pixelColor.luminance >= 0.5 ? .light : .dark
+}
+
+private func keyboardKeycapForeground(
+    pressed: Bool,
+    pixelColor: KeyboardPixel?,
+    pixelColorMode: KeyboardPixelColorMode?,
+    colorScheme: ColorScheme,
+    themeContrastColor: Color
+) -> Color {
+    if pressed {
+        return themeContrastColor
+    }
+    if pixelColorMode == .binary || pixelColor == nil {
+        return colorScheme == .dark
+            ? Color.white.opacity(0.84)
+            : Color.black.opacity(0.68)
+    }
+    let luminance = pixelColor?.keycapColor.luminance ?? 0
+    return luminance >= 0.52
+        ? Color.black.opacity(0.64)
+        : Color.white.opacity(0.78)
 }
 
 struct KeyboardStage: View {
@@ -50,6 +128,7 @@ struct KeyboardStage: View {
     let keyCounts: [UInt16: Int]
     let alignsToTop: Bool
     let pixelFrame: KeyboardPixelFrame?
+    let pixelColorMode: KeyboardPixelColorMode?
 
     @State private var rotation = CGSize(width: -1.5, height: 7)
 
@@ -69,6 +148,7 @@ struct KeyboardStage: View {
                 pixelFrame: pixelFrame
             )
             .environment(\.keyboardRenderScale, scale)
+            .environment(\.keyboardPixelColorMode, pixelColorMode)
             .frame(width: modelWidth, height: modelHeight)
             .rotation3DEffect(.degrees(rotation.height), axis: (x: 1, y: 0, z: 0), perspective: 0.42)
             .rotation3DEffect(.degrees(rotation.width), axis: (x: 0, y: 1, z: 0), perspective: 0.32)
@@ -323,39 +403,37 @@ private struct ArrowKeyHalfStyle: ButtonStyle {
     let pixelColor: KeyboardPixel?
     @Environment(\.keyboardRenderScale) private var renderScale
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.keyboardPixelColorMode) private var pixelColorMode
     @Environment(\.keyDiaryAccentColor) private var themeColor
     @Environment(\.keyDiaryAccentContrastColor) private var themeContrastColor
 
     func makeBody(configuration: Configuration) -> some View {
-        let pressed = pixelColor == nil && (configuration.isPressed || isActive)
+        let pressed = configuration.isPressed || isActive
         let cornerRadius = KeyboardMetrics.keyCornerRadius * renderScale
-        let keycapPixel = pixelColor?.keycapColor
+        let appearanceColorScheme = keyboardKeycapColorScheme(
+            pixelColor: pixelColor,
+            pixelColorMode: pixelColorMode,
+            fallback: colorScheme
+        )
+        let keycapPixel = pixelColorMode == .binary ? nil : pixelColor?.keycapColor
 
         configuration.label
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background {
                 ZStack {
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .fill(keycapPixel?.adjustingBrightness(by: -0.12).swiftUIColor ?? (pressed ? themeColor.opacity(0.62) : Color.black.opacity(colorScheme == .dark ? 0.72 : 0.38)))
+                        .fill(pressed ? themeColor.opacity(0.62) : Color.black.opacity(appearanceColorScheme == .dark ? 0.72 : 0.38))
                         .offset(
                             y: (pressed ? KeyboardMetrics.pressedKeyDepth : KeyboardMetrics.keyDepth) * renderScale
                         )
 
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .fill(
-                            LinearGradient(
-                                colors: pixelColor != nil
-                                    ? [
-                                        keycapPixel?.adjustingBrightness(by: 0.06).swiftUIColor ?? .clear,
-                                        keycapPixel?.adjustingBrightness(by: -0.025).swiftUIColor ?? .clear
-                                    ]
-                                    : pressed
-                                    ? [themeColor.opacity(0.78), themeColor]
-                                    : colorScheme == .dark
-                                        ? [Color(white: 0.16), Color(white: 0.09)]
-                                        : [Color(white: 1.0), Color(white: 0.9)],
-                                startPoint: .top,
-                                endPoint: .bottom
+                            keyboardKeycapGradient(
+                                pressed: pressed,
+                                pixelColor: keycapPixel,
+                                themeColor: themeColor,
+                                colorScheme: appearanceColorScheme
                             )
                         )
                         .overlay {
@@ -367,14 +445,12 @@ private struct ArrowKeyHalfStyle: ButtonStyle {
                         .overlay {
                             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                                 .stroke(
-                                    pixelColor != nil
-                                        ? .black.opacity(0.36)
-                                        : pressed ? themeColor.opacity(0.9) : .black.opacity(colorScheme == .dark ? 0.68 : 0.3),
+                                    pressed ? themeColor.opacity(0.9) : .black.opacity(appearanceColorScheme == .dark ? 0.68 : 0.3),
                                     lineWidth: renderScale
                                 )
                         }
                         .shadow(
-                            color: pressed ? themeColor.opacity(0.34) : .black.opacity(colorScheme == .dark ? 0.34 : 0.18),
+                            color: pressed ? themeColor.opacity(0.34) : .black.opacity(appearanceColorScheme == .dark ? 0.34 : 0.18),
                             radius: (pressed
                                 ? KeyboardMetrics.pressedKeyShadowRadius
                                 : KeyboardMetrics.keyShadowRadius) * renderScale,
@@ -385,13 +461,17 @@ private struct ArrowKeyHalfStyle: ButtonStyle {
                 }
             }
             .foregroundStyle(
-                pixelColor.map { $0.keycapColor.luminance >= 0.52 ? Color.black.opacity(0.64) : Color.white.opacity(0.78) } ?? (pressed
-                    ? themeContrastColor
-                    : colorScheme == .dark ? Color.white.opacity(0.84) : Color.black.opacity(0.68))
+                keyboardKeycapForeground(
+                    pressed: pressed,
+                    pixelColor: pixelColor,
+                    pixelColorMode: pixelColorMode,
+                    colorScheme: appearanceColorScheme,
+                    themeContrastColor: themeContrastColor
+                )
             )
             .contentShape(Rectangle())
             .offset(y: pressed ? KeyboardMetrics.pressedKeyOffset * renderScale : 0)
-            .animation(pixelColor == nil ? .spring(response: 0.14, dampingFraction: 0.6) : nil, value: pressed)
+            .animation(.spring(response: 0.14, dampingFraction: 0.6), value: pressed)
     }
 }
 
@@ -566,38 +646,36 @@ private struct ThreeDimensionalKeyStyle: ButtonStyle {
     let pixelColor: KeyboardPixel?
     @Environment(\.keyboardRenderScale) private var renderScale
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.keyboardPixelColorMode) private var pixelColorMode
     @Environment(\.keyDiaryAccentColor) private var themeColor
     @Environment(\.keyDiaryAccentContrastColor) private var themeContrastColor
 
     func makeBody(configuration: Configuration) -> some View {
-        let pressed = pixelColor == nil && (configuration.isPressed || isActive)
+        let pressed = configuration.isPressed || isActive
         let cornerRadii = keyCornerRadii
-        let keycapPixel = pixelColor?.keycapColor
+        let appearanceColorScheme = keyboardKeycapColorScheme(
+            pixelColor: pixelColor,
+            pixelColorMode: pixelColorMode,
+            fallback: colorScheme
+        )
+        let keycapPixel = pixelColorMode == .binary ? nil : pixelColor?.keycapColor
 
         configuration.label
             .background {
                 ZStack {
                     UnevenRoundedRectangle(cornerRadii: cornerRadii, style: .continuous)
-                        .fill(keycapPixel?.adjustingBrightness(by: -0.12).swiftUIColor ?? (pressed ? themeColor.opacity(0.62) : Color.black.opacity(colorScheme == .dark ? 0.72 : 0.38)))
+                        .fill(pressed ? themeColor.opacity(0.62) : Color.black.opacity(appearanceColorScheme == .dark ? 0.72 : 0.38))
                         .offset(
                             y: (pressed ? KeyboardMetrics.pressedKeyDepth : KeyboardMetrics.keyDepth) * renderScale
                         )
 
                     UnevenRoundedRectangle(cornerRadii: cornerRadii, style: .continuous)
                         .fill(
-                            LinearGradient(
-                                colors: pixelColor != nil
-                                    ? [
-                                        keycapPixel?.adjustingBrightness(by: 0.06).swiftUIColor ?? .clear,
-                                        keycapPixel?.adjustingBrightness(by: -0.025).swiftUIColor ?? .clear
-                                    ]
-                                    : pressed
-                                    ? [themeColor.opacity(0.78), themeColor]
-                                    : colorScheme == .dark
-                                        ? [Color(white: 0.16), Color(white: 0.09)]
-                                        : [Color(white: 1.0), Color(white: 0.9)],
-                                startPoint: .top,
-                                endPoint: .bottom
+                            keyboardKeycapGradient(
+                                pressed: pressed,
+                                pixelColor: keycapPixel,
+                                themeColor: themeColor,
+                                colorScheme: appearanceColorScheme
                             )
                         )
                         .overlay {
@@ -609,14 +687,12 @@ private struct ThreeDimensionalKeyStyle: ButtonStyle {
                         .overlay {
                             UnevenRoundedRectangle(cornerRadii: cornerRadii, style: .continuous)
                                 .stroke(
-                                    pixelColor != nil
-                                        ? .black.opacity(0.36)
-                                        : pressed ? themeColor.opacity(0.9) : .black.opacity(colorScheme == .dark ? 0.68 : 0.3),
+                                    pressed ? themeColor.opacity(0.9) : .black.opacity(appearanceColorScheme == .dark ? 0.68 : 0.3),
                                     lineWidth: renderScale
                                 )
                         }
                         .shadow(
-                            color: pressed ? themeColor.opacity(0.34) : .black.opacity(colorScheme == .dark ? 0.34 : 0.18),
+                            color: pressed ? themeColor.opacity(0.34) : .black.opacity(appearanceColorScheme == .dark ? 0.34 : 0.18),
                             radius: (pressed
                                 ? KeyboardMetrics.pressedKeyShadowRadius
                                 : KeyboardMetrics.keyShadowRadius) * renderScale,
@@ -627,12 +703,16 @@ private struct ThreeDimensionalKeyStyle: ButtonStyle {
                 }
             }
             .foregroundStyle(
-                pixelColor.map { $0.keycapColor.luminance >= 0.52 ? Color.black.opacity(0.64) : Color.white.opacity(0.78) } ?? (pressed
-                    ? themeContrastColor
-                    : colorScheme == .dark ? Color.white.opacity(0.84) : Color.black.opacity(0.68))
+                keyboardKeycapForeground(
+                    pressed: pressed,
+                    pixelColor: pixelColor,
+                    pixelColorMode: pixelColorMode,
+                    colorScheme: appearanceColorScheme,
+                    themeContrastColor: themeContrastColor
+                )
             )
             .offset(y: pressed ? KeyboardMetrics.pressedKeyOffset * renderScale : 0)
-            .animation(pixelColor == nil ? .spring(response: 0.14, dampingFraction: 0.6) : nil, value: pressed)
+            .animation(.spring(response: 0.14, dampingFraction: 0.6), value: pressed)
     }
 
     private var keyCornerRadii: RectangleCornerRadii {

@@ -72,20 +72,16 @@ struct KeyboardPixel: Equatable, Hashable, Sendable {
             : .black
     }
 
-    /// Keeps source hue while fitting it into the keyboard's original dark/light
-    /// keycap range. Pure black and white therefore remain dimensional keycaps.
+    /// Preserves source contrast and hue while keeping a small amount of headroom
+    /// for the keycap's highlight and shadow gradient.
     var keycapColor: KeyboardPixel {
-        let neutral = 0.12 + luminance * 0.76
-        let saturation = 0.78
+        let neutral = 0.04 + luminance * 0.92
+        let saturation = 0.9
         return KeyboardPixel(
             red: neutral + (red - luminance) * saturation,
             green: neutral + (green - luminance) * saturation,
             blue: neutral + (blue - luminance) * saturation
         )
-    }
-
-    func adjustingBrightness(by amount: Double) -> KeyboardPixel {
-        KeyboardPixel(red: red + amount, green: green + amount, blue: blue + amount)
     }
 }
 
