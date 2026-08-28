@@ -7,10 +7,10 @@ import AVFoundation
 import Foundation
 import OSLog
 
-/// A lightweight, asset-free polyphonic player for live key feedback.
+/// A polyphonic player for live key feedback.
 ///
-/// Keeping the sounds synthesized locally avoids network downloads and lets rapid
-/// key combinations overlap naturally instead of cutting one another off.
+/// Mechanical styles use the recorded kbsim samples bundled with the app, while
+/// piano styles remain locally synthesized so rapid combinations can overlap.
 @MainActor
 final class KeySoundPlayer {
     enum PianoKeyRole: Hashable {
@@ -36,16 +36,9 @@ final class KeySoundPlayer {
         let colorSeed: UInt16
     }
 
-    private struct MechanicalProfile {
-        let duration: Double
-        let bodyFrequency: Double
-        let clickFrequency: Double
-        let impactAmount: Double
-        let clickAmount: Double
-        let bodyAmount: Double
-        let tactileAmount: Double
-        let reboundAmount: Double
-        let outputGain: Double
+    private struct MechanicalBufferKey: Hashable {
+        let style: KeySoundStyle
+        let sampleName: String
     }
 
     private static let sampleRate = 44_100.0
@@ -59,7 +52,8 @@ final class KeySoundPlayer {
     private let logger = Logger(subsystem: "com.MrSouthWall.KeyDiary", category: "KeySound")
     private var voices: [AVAudioPlayerNode] = []
     private var nextVoiceIndex = 0
-    private var mechanicalBuffers: [KeySoundStyle: [AVAudioPCMBuffer]] = [:]
+    private var mechanicalBuffers: [MechanicalBufferKey: AVAudioPCMBuffer] = [:]
+    private var unavailableMechanicalBuffers: Set<MechanicalBufferKey> = []
     private var pianoBuffers: [PianoBufferKey: AVAudioPCMBuffer] = [:]
     private var melodyStep = 0
     private var lastPlayedStyle: KeySoundStyle?
@@ -72,11 +66,6 @@ final class KeySoundPlayer {
             voices.append(voice)
         }
 
-        for style in KeySoundStyle.mechanicalStyles {
-            mechanicalBuffers[style] = (0..<6).compactMap {
-                Self.makeMechanicalKeyBuffer(style: style, variant: $0, format: format)
-            }
-        }
         engine.prepare()
     }
 
@@ -95,18 +84,57 @@ final class KeySoundPlayer {
     }
 
     func play(keyCode: UInt16, style: KeySoundStyle, volume: Double) {
-        play(keyCode: keyCode, style: style, volume: volume, advancesMelody: true)
+        play(
+            keyCode: keyCode,
+            style: style,
+            volume: volume,
+            advancesMelody: true,
+            mechanicalPhase: .press
+        )
     }
 
     func preview(keyCode: UInt16, style: KeySoundStyle, volume: Double) {
-        play(keyCode: keyCode, style: style, volume: volume, advancesMelody: false)
+        play(
+            keyCode: keyCode,
+            style: style,
+            volume: volume,
+            advancesMelody: false,
+            mechanicalPhase: .press
+        )
+    }
+
+    func playReleaseUsingPreferences(keyCode: UInt16) {
+        let defaults = UserDefaults.standard
+        guard defaults.bool(forKey: KeySoundPreferences.isEnabledStorageKey) else { return }
+
+        let style = defaults.string(forKey: KeySoundPreferences.styleStorageKey)
+            .flatMap(KeySoundStyle.init(rawValue:))
+            ?? KeySoundPreferences.defaultStyle
+        guard style.isMechanical else { return }
+
+        let volume = defaults.object(forKey: KeySoundPreferences.volumeStorageKey) == nil
+            ? KeySoundPreferences.defaultVolume
+            : defaults.double(forKey: KeySoundPreferences.volumeStorageKey)
+        play(
+            keyCode: keyCode,
+            style: style,
+            volume: volume,
+            advancesMelody: false,
+            mechanicalPhase: .release
+        )
+    }
+
+    private enum MechanicalPhase: String {
+        case press
+        case release
     }
 
     private func play(
         keyCode: UInt16,
         style: KeySoundStyle,
         volume: Double,
-        advancesMelody: Bool
+        advancesMelody: Bool,
+        mechanicalPhase: MechanicalPhase
     ) {
         guard !voices.isEmpty, startEngineIfNeeded() else { return }
 
@@ -118,8 +146,11 @@ final class KeySoundPlayer {
         let buffer: AVAudioPCMBuffer?
         let styleGain: Double
         if style.isMechanical {
-            let buffers = mechanicalBuffers[style] ?? []
-            buffer = buffers.isEmpty ? nil : buffers[Int(keyCode) % buffers.count]
+            buffer = mechanicalBuffer(
+                keyCode: keyCode,
+                style: style,
+                phase: mechanicalPhase
+            )
             styleGain = 1
         } else {
             let resolved = resolvePianoVoice(
@@ -214,7 +245,10 @@ final class KeySoundPlayer {
                 melodyStep = (melodyStep + 1) % Self.melodyNotes.count
             }
             return (Self.melodyPianoVoice(at: currentStep), UInt16(currentStep))
-        case .mechanicalRed, .mechanicalBrown, .mechanicalBlue:
+        case .novelKeysCream, .holyPanda, .alpaca, .turquoiseTealios,
+                .gateronBlackInk, .gateronRedInk, .cherryMXBlack,
+                .cherryMXBrown, .cherryMXBlue, .kailhBoxNavy,
+                .bucklingSpring, .skcmBlueAlps, .topre:
             return (Self.improvisationPianoVoice(for: keyCode), keyCode)
         }
     }
@@ -230,90 +264,111 @@ final class KeySoundPlayer {
         }
     }
 
-    private static func makeMechanicalKeyBuffer(
+    private func mechanicalBuffer(
+        keyCode: UInt16,
         style: KeySoundStyle,
-        variant: Int,
-        format: AVAudioFormat
+        phase: MechanicalPhase
     ) -> AVAudioPCMBuffer? {
-        let profile = mechanicalProfile(for: style, variant: variant)
-        let frameCount = AVAudioFrameCount(profile.duration * sampleRate)
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount),
-              let samples = buffer.floatChannelData?[0] else { return nil }
-        buffer.frameLength = frameCount
+        guard let switchName = style.kbsimIdentifier else { return nil }
 
-        var generator = SeededNoise(seed: UInt64(0xA11CE + variant * 7_919))
-        let bodyFrequency = profile.bodyFrequency + Double(variant) * 7.5
-        let clickFrequency = profile.clickFrequency + Double(variant) * 71.0
-
-        for frame in 0..<Int(frameCount) {
-            let time = Double(frame) / sampleRate
-            let impactNoise = generator.next() * exp(-time * 92.0)
-            let keycapClick = sin(2 * .pi * clickFrequency * time) * exp(-time * 76.0)
-            let body = sin(2 * .pi * bodyFrequency * time) * exp(-time * 31.0)
-
-            let tactileTime = time - 0.0125 - Double(variant) * 0.00035
-            let tactileClick = tactileTime >= 0
-                ? (sin(2 * .pi * (clickFrequency * 1.16) * tactileTime) + generator.next() * 0.42)
-                    * exp(-tactileTime * 172.0)
-                : 0
-
-            let reboundTime = time - 0.037 - Double(variant) * 0.0007
-            let rebound = reboundTime >= 0
-                ? (generator.next() * 0.55 + sin(2 * .pi * 930.0 * reboundTime) * 0.3)
-                    * exp(-reboundTime * 118.0)
-                : 0
-
-            let mixed = impactNoise * profile.impactAmount
-                + keycapClick * profile.clickAmount
-                + body * profile.bodyAmount
-                + tactileClick * profile.tactileAmount
-                + rebound * profile.reboundAmount
-            samples[frame] = Float(tanh(mixed * 1.3) * profile.outputGain)
+        let preferredSample = Self.mechanicalSampleName(keyCode: keyCode, phase: phase)
+        if let buffer = loadMechanicalBuffer(
+            style: style,
+            switchName: switchName,
+            phase: phase,
+            sampleName: preferredSample
+        ) {
+            return buffer
         }
-        return buffer
+
+        let fallbackSample = phase == .press
+            ? "GENERIC_R\(Self.mechanicalRow(for: keyCode))"
+            : "GENERIC"
+        guard fallbackSample != preferredSample else { return nil }
+        return loadMechanicalBuffer(
+            style: style,
+            switchName: switchName,
+            phase: phase,
+            sampleName: fallbackSample
+        )
     }
 
-    private static func mechanicalProfile(
-        for style: KeySoundStyle,
-        variant: Int
-    ) -> MechanicalProfile {
-        switch style {
-        case .mechanicalRed:
-            MechanicalProfile(
-                duration: 0.085,
-                bodyFrequency: 122,
-                clickFrequency: 1_080,
-                impactAmount: 0.38,
-                clickAmount: 0.1,
-                bodyAmount: 0.46,
-                tactileAmount: 0,
-                reboundAmount: 0.16,
-                outputGain: 0.72
+    private func loadMechanicalBuffer(
+        style: KeySoundStyle,
+        switchName: String,
+        phase: MechanicalPhase,
+        sampleName: String
+    ) -> AVAudioPCMBuffer? {
+        let key = MechanicalBufferKey(
+            style: style,
+            sampleName: "\(phase.rawValue)_\(sampleName)"
+        )
+        if let cached = mechanicalBuffers[key] { return cached }
+        if unavailableMechanicalBuffers.contains(key) { return nil }
+
+        let resourceName = "\(switchName)_\(phase.rawValue)_\(sampleName)"
+        guard let url = Bundle.main.url(forResource: resourceName, withExtension: "mp3") else {
+            unavailableMechanicalBuffers.insert(key)
+            logger.error("Missing kbsim sample: \(resourceName, privacy: .public).mp3")
+            return nil
+        }
+
+        do {
+            let file = try AVAudioFile(forReading: url)
+            let frameCapacity = AVAudioFrameCount(file.length)
+            guard let buffer = AVAudioPCMBuffer(
+                pcmFormat: file.processingFormat,
+                frameCapacity: frameCapacity
+            ) else {
+                unavailableMechanicalBuffers.insert(key)
+                return nil
+            }
+            try file.read(into: buffer)
+            mechanicalBuffers[key] = buffer
+            return buffer
+        } catch {
+            unavailableMechanicalBuffers.insert(key)
+            logger.error(
+                "Unable to load kbsim sample \(resourceName, privacy: .public): \(error.localizedDescription, privacy: .public)"
             )
-        case .mechanicalBlue:
-            MechanicalProfile(
-                duration: 0.125,
-                bodyFrequency: 166,
-                clickFrequency: 2_180,
-                impactAmount: 0.46,
-                clickAmount: 0.44,
-                bodyAmount: 0.25,
-                tactileAmount: 0.38,
-                reboundAmount: 0.34,
-                outputGain: 0.86
-            )
-        case .mechanicalBrown, .pianoImprovisation, .pianoKeyboard, .pianoMelody:
-            MechanicalProfile(
-                duration: 0.105,
-                bodyFrequency: 148,
-                clickFrequency: 1_460,
-                impactAmount: 0.48,
-                clickAmount: 0.2,
-                bodyAmount: 0.36,
-                tactileAmount: 0.16,
-                reboundAmount: 0.25,
-                outputGain: 0.8
-            )
+            return nil
+        }
+    }
+
+    static func mechanicalSampleName(keyCode: UInt16, isRelease: Bool) -> String {
+        mechanicalSampleName(keyCode: keyCode, phase: isRelease ? .release : .press)
+    }
+
+    private static func mechanicalSampleName(
+        keyCode: UInt16,
+        phase: MechanicalPhase
+    ) -> String {
+        switch keyCode {
+        case 49:
+            return "SPACE"
+        case 36, 76:
+            return "ENTER"
+        case 51, 117:
+            return "BACKSPACE"
+        default:
+            return phase == .press ? "GENERIC_R\(mechanicalRow(for: keyCode))" : "GENERIC"
+        }
+    }
+
+    static func mechanicalRow(for keyCode: UInt16) -> Int {
+        switch keyCode {
+        case 53, 64, 79, 80, 90, 96, 97, 98, 99, 100, 101, 103,
+                105, 106, 107, 109, 111, 113, 114, 115, 116, 118, 119,
+                120, 121, 122:
+            0
+        case 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 50, 51:
+            1
+        case 12, 13, 14, 15, 16, 17, 30, 31, 32, 33, 34, 35, 42, 48, 117:
+            2
+        case 0, 1, 2, 3, 4, 5, 36, 37, 38, 39, 40, 41, 57:
+            3
+        default:
+            4
         }
     }
 

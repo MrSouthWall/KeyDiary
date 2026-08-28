@@ -71,6 +71,9 @@ final class KeyboardRecorder {
 
         case .keyUp:
             guard event.keyCode != 57 else { return }
+            if pressedKeys[event.keyCode] != nil {
+                keySoundPlayer.playReleaseUsingPreferences(keyCode: event.keyCode)
+            }
             setPressed(false, keyCode: event.keyCode)
 
         case .flagsChanged:
@@ -79,6 +82,9 @@ final class KeyboardRecorder {
         case .systemDefined:
             guard let resolvedEvent = KeyCodeResolver.systemDefinedKeyEvent(for: event) else { return }
             let key = resolvedEvent.key
+            if resolvedEvent.phase == .up, pressedKeys[key.keyCode] != nil {
+                keySoundPlayer.playReleaseUsingPreferences(keyCode: key.keyCode)
+            }
             setPressed(resolvedEvent.phase.isPressed, keyCode: key.keyCode, key: key.label)
             if resolvedEvent.phase.shouldRecord {
                 record(
@@ -100,6 +106,7 @@ final class KeyboardRecorder {
         // Toggle its tracked state and record only the down transition.
         if keyCode == 57 {
             if pressedModifierKeyCodes.remove(keyCode) != nil {
+                keySoundPlayer.playReleaseUsingPreferences(keyCode: keyCode)
                 setPressed(false, keyCode: keyCode)
                 return
             }
@@ -113,6 +120,7 @@ final class KeyboardRecorder {
         guard let flag = KeyCodeResolver.modifierFlag(for: keyCode) else { return }
 
         if pressedModifierKeyCodes.remove(keyCode) != nil {
+            keySoundPlayer.playReleaseUsingPreferences(keyCode: keyCode)
             setPressed(false, keyCode: keyCode)
             return
         }

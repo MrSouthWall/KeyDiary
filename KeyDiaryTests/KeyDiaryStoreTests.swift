@@ -9,15 +9,27 @@ import XCTest
 final class KeyDiaryStoreTests: XCTestCase {
     func testKeySoundStylesAndPianoLayoutAreStable() {
         XCTAssertEqual(KeySoundStyle.allCases, [
-            .mechanicalRed,
-            .mechanicalBrown,
-            .mechanicalBlue,
+            .novelKeysCream,
+            .holyPanda,
+            .alpaca,
+            .turquoiseTealios,
+            .gateronBlackInk,
+            .gateronRedInk,
+            .cherryMXBlack,
+            .cherryMXBrown,
+            .cherryMXBlue,
+            .kailhBoxNavy,
+            .bucklingSpring,
+            .skcmBlueAlps,
+            .topre,
             .pianoImprovisation,
             .pianoKeyboard,
             .pianoMelody
         ])
-        XCTAssertEqual(KeySoundPreferences.defaultStyle, .mechanicalBrown)
-        XCTAssertEqual(KeySoundStyle(rawValue: "physicalKeyboard"), .mechanicalBrown)
+        XCTAssertEqual(KeySoundPreferences.defaultStyle, .cherryMXBrown)
+        XCTAssertEqual(KeySoundStyle(rawValue: "mechanicalRed"), .gateronRedInk)
+        XCTAssertEqual(KeySoundStyle(rawValue: "physicalKeyboard"), .cherryMXBrown)
+        XCTAssertEqual(KeySoundStyle(rawValue: "mechanicalBlue"), .cherryMXBlue)
         XCTAssertEqual(KeySoundStyle(rawValue: "piano"), .pianoImprovisation)
         XCTAssertEqual(KeySoundPlayer.pianoMIDINote(for: 0), 60)
         XCTAssertEqual(KeySoundPlayer.pianoMIDINote(for: 1), 62)
@@ -29,9 +41,19 @@ final class KeyDiaryStoreTests: XCTestCase {
 
     func testMechanicalAndPianoStyleGroupsAreComplete() {
         XCTAssertEqual(KeySoundStyle.mechanicalStyles, [
-            .mechanicalRed,
-            .mechanicalBrown,
-            .mechanicalBlue
+            .novelKeysCream,
+            .holyPanda,
+            .alpaca,
+            .turquoiseTealios,
+            .gateronBlackInk,
+            .gateronRedInk,
+            .cherryMXBlack,
+            .cherryMXBrown,
+            .cherryMXBlue,
+            .kailhBoxNavy,
+            .bucklingSpring,
+            .skcmBlueAlps,
+            .topre
         ])
         XCTAssertEqual(KeySoundStyle.pianoStyles, [
             .pianoImprovisation,
@@ -40,6 +62,47 @@ final class KeyDiaryStoreTests: XCTestCase {
         ])
         XCTAssertTrue(KeySoundStyle.mechanicalStyles.allSatisfy(\.isMechanical))
         XCTAssertTrue(KeySoundStyle.pianoStyles.allSatisfy { !$0.isMechanical })
+        XCTAssertEqual(Set(KeySoundStyle.mechanicalStyles.compactMap(\.kbsimIdentifier)).count, 13)
+    }
+
+    func testMechanicalSamplesResolveSpecialKeysAndPhysicalRows() {
+        XCTAssertEqual(KeySoundPlayer.mechanicalSampleName(keyCode: 49, isRelease: false), "SPACE")
+        XCTAssertEqual(KeySoundPlayer.mechanicalSampleName(keyCode: 36, isRelease: false), "ENTER")
+        XCTAssertEqual(KeySoundPlayer.mechanicalSampleName(keyCode: 51, isRelease: false), "BACKSPACE")
+        XCTAssertEqual(KeySoundPlayer.mechanicalSampleName(keyCode: 18, isRelease: false), "GENERIC_R1")
+        XCTAssertEqual(KeySoundPlayer.mechanicalSampleName(keyCode: 12, isRelease: false), "GENERIC_R2")
+        XCTAssertEqual(KeySoundPlayer.mechanicalSampleName(keyCode: 0, isRelease: false), "GENERIC_R3")
+        XCTAssertEqual(KeySoundPlayer.mechanicalSampleName(keyCode: 6, isRelease: false), "GENERIC_R4")
+        XCTAssertEqual(KeySoundPlayer.mechanicalSampleName(keyCode: 0, isRelease: true), "GENERIC")
+    }
+
+    func testAllKbsimStylesHaveBundledPressAndReleaseSamples() throws {
+        for style in KeySoundStyle.mechanicalStyles {
+            let identifier = try XCTUnwrap(style.kbsimIdentifier)
+            var sampleNames = (0...4).map { "\(identifier)_press_GENERIC_R\($0)" }
+            sampleNames.append("\(identifier)_release_GENERIC")
+
+            if style != .cherryMXBlue {
+                for specialKey in ["SPACE", "ENTER", "BACKSPACE"] {
+                    sampleNames.append("\(identifier)_press_\(specialKey)")
+                    sampleNames.append("\(identifier)_release_\(specialKey)")
+                }
+            }
+
+            for sampleName in sampleNames {
+                XCTAssertNotNil(
+                    Bundle.main.url(forResource: sampleName, withExtension: "mp3"),
+                    "Missing bundled kbsim sample \(sampleName).mp3"
+                )
+            }
+        }
+
+        let sampleURL = try XCTUnwrap(
+            Bundle.main.url(forResource: "mxbrown_press_GENERIC_R2", withExtension: "mp3")
+        )
+        let audioFile = try AVAudioFile(forReading: sampleURL)
+        XCTAssertGreaterThan(audioFile.length, 0)
+        XCTAssertNotNil(Bundle.main.url(forResource: "kbsim-LICENSE", withExtension: "txt"))
     }
 
     func testPianoTypingMapUsesFrequencyRolesAndOnlyPentatonicNotes() {

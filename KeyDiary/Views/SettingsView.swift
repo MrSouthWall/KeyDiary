@@ -21,6 +21,21 @@ struct KeyDiarySettingsView: View {
     @State private var isShowingReplaceConfirmation = false
 
     var body: some View {
+        TabView {
+            generalSettings
+                .tabItem {
+                    Label("通用", systemImage: "gearshape")
+                }
+
+            OpenSourceProjectsSettingsView()
+                .tabItem {
+                    Label("开源项目", systemImage: "shippingbox")
+                }
+        }
+        .frame(width: 540, height: 720)
+    }
+
+    private var generalSettings: some View {
         Form {
             Section("外观") {
                 LabeledContent("显示模式") {
@@ -200,7 +215,6 @@ struct KeyDiarySettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 720)
         .onAppear {
             store.refreshInputMonitoringStatus()
         }
