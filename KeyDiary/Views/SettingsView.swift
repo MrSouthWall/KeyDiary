@@ -7,6 +7,7 @@ import SwiftUI
 
 struct KeyDiarySettingsView: View {
     @Bindable var store: KeyDiaryStore
+    @Bindable var launchAtLogin: LaunchAtLoginController
 
     @AppStorage(KeyDiaryTheme.appearanceStorageKey) private var appearanceRawValue = AppAppearance.system.rawValue
     @AppStorage(KeyDiaryTheme.accentColorStorageKey) private var accentColorHex = KeyDiaryTheme.defaultAccentHex
@@ -64,6 +65,31 @@ struct KeyDiarySettingsView: View {
                         .disabled(accentColorHex == KeyDiaryTheme.defaultAccentHex)
                     }
                 }
+            }
+
+            Section("启动") {
+                Toggle("登录时自动启动", isOn: launchAtLoginBinding)
+
+                if launchAtLogin.requiresApproval {
+                    LabeledContent("系统权限") {
+                        Button("打开系统设置…") {
+                            launchAtLogin.openSystemSettings()
+                        }
+                    }
+
+                    Text("请在“通用 > 登录项与扩展”中允许 Key Diary 在登录时运行。")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                } else if let errorMessage = launchAtLogin.errorMessage {
+                    Text("无法更新登录项：\(errorMessage)")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .textSelection(.enabled)
+                }
+
+                Text("应用启动后会驻留在菜单栏，不会自动显示主界面。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("记录") {
@@ -138,7 +164,7 @@ struct KeyDiarySettingsView: View {
                 .disabled(!isKeySoundEnabled)
 
                 HStack(alignment: .firstTextBaseline) {
-                    Text("\(selectedKeySoundStyle.detail) 仅在自动记录运行时触发。")
+                    Text("\(selectedKeySoundStyle.detail) 自动记录和回放时会播放，导出视频也会包含声音。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -217,6 +243,7 @@ struct KeyDiarySettingsView: View {
         .formStyle(.grouped)
         .onAppear {
             store.refreshInputMonitoringStatus()
+            launchAtLogin.refresh()
         }
         .confirmationDialog(
             "清除全部记录？",
@@ -259,6 +286,13 @@ struct KeyDiarySettingsView: View {
             set: { shouldRecord in
                 shouldRecord ? store.startRecording() : store.stopRecording()
             }
+        )
+    }
+
+    private var launchAtLoginBinding: Binding<Bool> {
+        Binding(
+            get: { launchAtLogin.isEnabled },
+            set: { launchAtLogin.setEnabled($0) }
         )
     }
 
@@ -319,5 +353,8 @@ struct KeyDiarySettingsView: View {
 }
 
 #Preview {
-    KeyDiarySettingsView(store: KeyDiaryStore())
+    KeyDiarySettingsView(
+        store: KeyDiaryStore(),
+        launchAtLogin: LaunchAtLoginController()
+    )
 }

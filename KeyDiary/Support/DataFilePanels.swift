@@ -45,6 +45,31 @@ enum DataFilePanels {
         return panel.runModal() == .OK ? panel.url : nil
     }
 
+    static func chooseKeyboardCinemaVideo() -> URL? {
+        let panel = NSOpenPanel()
+        panel.title = "选择键盘像素影院视频"
+        panel.message = "视频会实时缩小为 6×14 个键帽像素，并保留原声。"
+        panel.prompt = "载入并播放"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.movie, .mpeg4Movie, .quickTimeMovie]
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
+    static func chooseKeyboardCinemaExportFile(settings: PlaybackVideoSettings) -> URL? {
+        let panel = NSSavePanel()
+        panel.title = "导出键盘像素视频"
+        panel.message = settings.exportDescription + " 若原片包含音轨，导出文件会保留原声。"
+        panel.prompt = "开始导出"
+        panel.canCreateDirectories = true
+        panel.allowedContentTypes = [settings.container == .mp4 ? .mpeg4Movie : .quickTimeMovie]
+        panel.isExtensionHidden = false
+        let date = String(ISO8601DateFormatter().string(from: .now).prefix(10))
+        panel.nameFieldStringValue = "KeyDiary-Cinema-\(date).\(settings.filenameExtension)"
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
     private static func defaultFilename(format: DataTransferFormat) -> String {
         let date = String(ISO8601DateFormatter().string(from: .now).prefix(10))
         return "KeyDiary-\(date).\(format.filenameExtension)"

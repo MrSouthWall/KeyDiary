@@ -5,7 +5,7 @@
 
 import Foundation
 
-enum KeySoundStyle: String, CaseIterable, Identifiable {
+enum KeySoundStyle: String, CaseIterable, Identifiable, Sendable {
     case novelKeysCream
     case holyPanda
     case alpaca
@@ -133,4 +133,26 @@ enum KeySoundPreferences {
 
     static let defaultStyle = KeySoundStyle.cherryMXBrown
     static let defaultVolume = 0.55
+}
+
+nonisolated struct KeySoundConfiguration: Equatable, Sendable {
+    let isEnabled: Bool
+    let style: KeySoundStyle
+    let volume: Double
+
+    @MainActor
+    static var current: Self {
+        let defaults = UserDefaults.standard
+        let style = defaults.string(forKey: KeySoundPreferences.styleStorageKey)
+            .flatMap(KeySoundStyle.init(rawValue:))
+            ?? KeySoundPreferences.defaultStyle
+        let volume = defaults.object(forKey: KeySoundPreferences.volumeStorageKey) == nil
+            ? KeySoundPreferences.defaultVolume
+            : defaults.double(forKey: KeySoundPreferences.volumeStorageKey)
+        return Self(
+            isEnabled: defaults.bool(forKey: KeySoundPreferences.isEnabledStorageKey),
+            style: style,
+            volume: min(max(volume, 0), 1)
+        )
+    }
 }

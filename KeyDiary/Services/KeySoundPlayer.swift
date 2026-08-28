@@ -41,6 +41,12 @@ final class KeySoundPlayer {
         let sampleName: String
     }
 
+    private struct OfflineSoundEvent {
+        let startFrame: Int64
+        let buffer: AVAudioPCMBuffer
+        let gain: Float
+    }
+
     private static let sampleRate = 44_100.0
     private static let voiceCount = 12
 
@@ -70,17 +76,9 @@ final class KeySoundPlayer {
     }
 
     func playUsingPreferences(keyCode: UInt16) {
-        let defaults = UserDefaults.standard
-        guard defaults.bool(forKey: KeySoundPreferences.isEnabledStorageKey) else { return }
-
-        let style = defaults.string(forKey: KeySoundPreferences.styleStorageKey)
-            .flatMap(KeySoundStyle.init(rawValue:))
-            ?? KeySoundPreferences.defaultStyle
-        let volume = defaults.object(forKey: KeySoundPreferences.volumeStorageKey) == nil
-            ? KeySoundPreferences.defaultVolume
-            : defaults.double(forKey: KeySoundPreferences.volumeStorageKey)
-
-        play(keyCode: keyCode, style: style, volume: volume)
+        let configuration = KeySoundConfiguration.current
+        guard configuration.isEnabled else { return }
+        play(keyCode: keyCode, style: configuration.style, volume: configuration.volume)
     }
 
     func play(keyCode: UInt16, style: KeySoundStyle, volume: Double) {
@@ -104,24 +102,117 @@ final class KeySoundPlayer {
     }
 
     func playReleaseUsingPreferences(keyCode: UInt16) {
-        let defaults = UserDefaults.standard
-        guard defaults.bool(forKey: KeySoundPreferences.isEnabledStorageKey) else { return }
-
-        let style = defaults.string(forKey: KeySoundPreferences.styleStorageKey)
-            .flatMap(KeySoundStyle.init(rawValue:))
-            ?? KeySoundPreferences.defaultStyle
-        guard style.isMechanical else { return }
-
-        let volume = defaults.object(forKey: KeySoundPreferences.volumeStorageKey) == nil
-            ? KeySoundPreferences.defaultVolume
-            : defaults.double(forKey: KeySoundPreferences.volumeStorageKey)
+        let configuration = KeySoundConfiguration.current
+        guard configuration.isEnabled, configuration.style.isMechanical else { return }
         play(
             keyCode: keyCode,
-            style: style,
-            volume: volume,
+            style: configuration.style,
+            volume: configuration.volume,
             advancesMelody: false,
             mechanicalPhase: .release
         )
+    }
+
+    func resetSequence() {
+        melodyStep = 0
+        lastPlayedStyle = nil
+    }
+
+    func stopAllSounds() {
+        voices.forEach { $0.stop() }
+    }
+
+    func renderPlaybackAudio(
+        events: [PlaybackVideoEvent],
+        duration: TimeInterval,
+        configuration: KeySoundConfiguration,
+        to url: URL
+    ) async throws {
+        guard configuration.isEnabled, !events.isEmpty, duration > 0 else { return }
+
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
+
+        let audioFile = try AVAudioFile(
+            forWriting: url,
+            settings: [
+                AVFormatIDKey: kAudioFormatMPEG4AAC,
+                AVSampleRateKey: Self.sampleRate,
+                AVNumberOfChannelsKey: 1,
+                AVEncoderBitRateKey: 192_000
+            ],
+            commonFormat: .pcmFormatFloat32,
+            interleaved: false
+        )
+
+        resetSequence()
+        let totalFrames = Int64(ceil(duration * Self.sampleRate))
+        let chunkCapacity: AVAudioFrameCount = 4_096
+        var chunkStart: Int64 = 0
+        var chunkIndex = 0
+        var eventIndex = 0
+        var activeEvents: [OfflineSoundEvent] = []
+
+        while chunkStart < totalFrames {
+            try Task.checkCancellation()
+            let chunkLength = min(Int64(chunkCapacity), totalFrames - chunkStart)
+            let chunkEnd = chunkStart + chunkLength
+
+            while eventIndex < events.count {
+                let event = events[eventIndex]
+                let startFrame = Int64((event.presentationTime * Self.sampleRate).rounded())
+                guard startFrame < chunkEnd else { break }
+                if let sound = resolvedSound(
+                    keyCode: event.record.keyCode,
+                    style: configuration.style,
+                    advancesMelody: true,
+                    mechanicalPhase: .press
+                ) {
+                    activeEvents.append(OfflineSoundEvent(
+                        startFrame: startFrame,
+                        buffer: sound.buffer,
+                        gain: Float(min(max(configuration.volume * sound.styleGain, 0), 1))
+                    ))
+                }
+                eventIndex += 1
+            }
+
+            guard let chunk = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(chunkLength)),
+                  let output = chunk.floatChannelData?[0] else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+            chunk.frameLength = AVAudioFrameCount(chunkLength)
+            output.initialize(repeating: 0, count: Int(chunkLength))
+
+            for event in activeEvents {
+                guard let source = event.buffer.floatChannelData?[0] else { continue }
+                let soundEnd = event.startFrame + Int64(event.buffer.frameLength)
+                let overlapStart = max(chunkStart, event.startFrame)
+                let overlapEnd = min(chunkEnd, soundEnd)
+                guard overlapStart < overlapEnd else { continue }
+
+                let sourceOffset = Int(overlapStart - event.startFrame)
+                let outputOffset = Int(overlapStart - chunkStart)
+                let overlapLength = Int(overlapEnd - overlapStart)
+                for index in 0..<overlapLength {
+                    output[outputOffset + index] += source[sourceOffset + index] * event.gain
+                }
+            }
+
+            for index in 0..<Int(chunkLength) {
+                output[index] = tanh(output[index])
+            }
+            try audioFile.write(from: chunk)
+            activeEvents.removeAll {
+                $0.startFrame + Int64($0.buffer.frameLength) <= chunkEnd
+            }
+            chunkStart = chunkEnd
+            chunkIndex += 1
+            if chunkIndex.isMultiple(of: 32) {
+                await Task.yield()
+            }
+        }
     }
 
     private enum MechanicalPhase: String {
@@ -137,49 +228,56 @@ final class KeySoundPlayer {
         mechanicalPhase: MechanicalPhase
     ) {
         guard !voices.isEmpty, startEngineIfNeeded() else { return }
+        guard let sound = resolvedSound(
+            keyCode: keyCode,
+            style: style,
+            advancesMelody: advancesMelody,
+            mechanicalPhase: mechanicalPhase
+        ) else { return }
+        let voice = voices[nextVoiceIndex]
+        nextVoiceIndex = (nextVoiceIndex + 1) % voices.count
+        voice.stop()
+        voice.volume = Float(min(max(volume * sound.styleGain, 0), 1))
+        voice.scheduleBuffer(sound.buffer, at: nil, options: .interrupts)
+        voice.play()
+    }
 
+    private func resolvedSound(
+        keyCode: UInt16,
+        style: KeySoundStyle,
+        advancesMelody: Bool,
+        mechanicalPhase: MechanicalPhase
+    ) -> (buffer: AVAudioPCMBuffer, styleGain: Double)? {
         if style != lastPlayedStyle {
             if style == .pianoMelody { melodyStep = 0 }
             lastPlayedStyle = style
         }
 
-        let buffer: AVAudioPCMBuffer?
-        let styleGain: Double
         if style.isMechanical {
-            buffer = mechanicalBuffer(
+            guard let buffer = mechanicalBuffer(
                 keyCode: keyCode,
                 style: style,
                 phase: mechanicalPhase
-            )
-            styleGain = 1
-        } else {
-            let resolved = resolvePianoVoice(
-                keyCode: keyCode,
-                style: style,
-                advancesMelody: advancesMelody
-            )
-            let bufferKey = PianoBufferKey(voice: resolved.voice, colorSeed: resolved.colorSeed)
-            if let cached = pianoBuffers[bufferKey] {
-                buffer = cached
-            } else {
-                let generated = Self.makePianoBuffer(
-                    voice: resolved.voice,
-                    colorSeed: resolved.colorSeed,
-                    format: format
-                )
-                pianoBuffers[bufferKey] = generated
-                buffer = generated
-            }
-            styleGain = resolved.voice.gain
+            ) else { return nil }
+            return (buffer, 1)
         }
 
-        guard let buffer else { return }
-        let voice = voices[nextVoiceIndex]
-        nextVoiceIndex = (nextVoiceIndex + 1) % voices.count
-        voice.stop()
-        voice.volume = Float(min(max(volume * styleGain, 0), 1))
-        voice.scheduleBuffer(buffer, at: nil, options: .interrupts)
-        voice.play()
+        let resolved = resolvePianoVoice(
+            keyCode: keyCode,
+            style: style,
+            advancesMelody: advancesMelody
+        )
+        let bufferKey = PianoBufferKey(voice: resolved.voice, colorSeed: resolved.colorSeed)
+        if let cached = pianoBuffers[bufferKey] {
+            return (cached, resolved.voice.gain)
+        }
+        guard let generated = Self.makePianoBuffer(
+            voice: resolved.voice,
+            colorSeed: resolved.colorSeed,
+            format: format
+        ) else { return nil }
+        pianoBuffers[bufferKey] = generated
+        return (generated, resolved.voice.gain)
     }
 
     static func pianoMIDINote(for keyCode: UInt16) -> Int {

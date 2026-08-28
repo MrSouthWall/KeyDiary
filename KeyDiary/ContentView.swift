@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Bindable var store: KeyDiaryStore
+    @Bindable var videoPlayer: KeyboardVideoPlayer
 
     @Environment(\.dismissWindow) private var dismissWindow
     @Environment(\.openWindow) private var openWindow
@@ -27,9 +28,10 @@ struct ContentView: View {
                 activeKeyDescription: activeKeyDescription,
                 activeKeyCodes: activeKeyCodes,
                 displayMode: displayMode,
-                isPlaying: store.isPlaying,
+                isPlaying: stageIsPlaying,
                 keyCounts: displayMode == .statistics ? store.filteredKeyCounts : [:],
-                alignsToTop: false
+                alignsToTop: false,
+                pixelFrame: displayMode == .cinema ? videoPlayer.pixelFrame : nil
             )
             .transaction(value: displayMode) { transaction in
                 transaction.animation = nil
@@ -43,9 +45,11 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 KeyDiaryStatusBar(
                     store: store,
+                    videoPlayer: videoPlayer,
                     selection: $displayMode,
                     showCustomRange: { isShowingCustomRange = true },
-                    openFloatingKeyboard: openFloatingKeyboard
+                    openFloatingKeyboard: openFloatingKeyboard,
+                    openVideoPreview: openVideoPreview
                 )
 
                 Spacer()
@@ -56,7 +60,13 @@ struct ContentView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 
-                if displayMode != .playback {
+                if displayMode == .cinema {
+                    KeyboardCinemaTimeline(player: videoPlayer)
+                        .frame(maxWidth: .infinity)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+
+                if displayMode != .playback, displayMode != .cinema {
                     HStack {
                         ModeStatusView(
                             title: modeStatusTitle,
@@ -79,6 +89,13 @@ struct ContentView: View {
             if newMode != .playback {
                 store.stopPlayback()
             }
+            if newMode == .cinema {
+                videoPlayer.loadBundledBadAppleIfNeeded()
+                openVideoPreview()
+            } else {
+                videoPlayer.pause()
+                dismissWindow(id: "video-preview")
+            }
         }
         .onChange(of: store.activeLiveKeySummary) { _, keySummary in
             if let keySummary {
@@ -100,11 +117,23 @@ struct ContentView: View {
                 dismissButton: .default(Text("好"))
             )
         }
+        .alert(item: $videoPlayer.exportNotice) { notice in
+            Alert(
+                title: Text(notice.title),
+                message: Text(notice.message),
+                dismissButton: .default(Text("好"))
+            )
+        }
     }
 
     private func openFloatingKeyboard() {
+        dismissWindow(id: "video-preview")
         openWindow(id: "floating-keyboard")
         dismissWindow(id: "main")
+    }
+
+    private func openVideoPreview() {
+        openWindow(id: "video-preview")
     }
 
     private var stageBackground: some View {
@@ -138,6 +167,8 @@ struct ContentView: View {
         case .playback:
             if store.isPlaying { return "正在回放" }
             return store.playbackRecordCount == 0 ? "所选区间没有可回放记录" : "回放已就绪"
+        case .cinema:
+            return videoPlayer.isPlaying ? "键帽像素正在播放" : "键帽像素已暂停"
         }
     }
 
@@ -154,6 +185,8 @@ struct ContentView: View {
             if store.isPlaying { return "当前按键 · \(store.activePlaybackKey ?? "准备中")" }
             if store.playbackRecordCount == 0 { return "请调整时间轴的起止位置" }
             return "所选 \(store.playbackRecordCount.formatted()) 条记录 · 预计 \(store.estimatedPlaybackDurationTitle)"
+        case .cinema:
+            return videoPlayer.videoTitle ?? "选择一个视频"
         }
     }
 
@@ -162,6 +195,7 @@ struct ContentView: View {
         case .live: "bolt.fill"
         case .statistics: "chart.bar.fill"
         case .playback: store.isPlaying ? "waveform" : "play.fill"
+        case .cinema: videoPlayer.isPlaying ? "film.fill" : "film"
         }
     }
 
@@ -174,6 +208,7 @@ struct ContentView: View {
         case .live: store.activeLiveKeySummary
         case .statistics: nil
         case .playback: store.activePlaybackKey
+        case .cinema: nil
         }
     }
 
@@ -183,11 +218,20 @@ struct ContentView: View {
         case .statistics: []
         case .playback:
             store.activePlaybackKeyCode.map { Set([$0]) } ?? []
+        case .cinema: []
         }
     }
 
     private var stageBottomPadding: CGFloat {
-        return displayMode == .playback ? 200 : 60
+        switch displayMode {
+        case .playback: 200
+        case .cinema: 150
+        case .live, .statistics: 60
+        }
+    }
+
+    private var stageIsPlaying: Bool {
+        displayMode == .cinema ? videoPlayer.isPlaying : store.isPlaying
     }
 
     private var modeTransitionAnimation: Animation? {
@@ -225,5 +269,5 @@ private struct ModeStatusView: View {
 }
 
 #Preview {
-    ContentView(store: KeyDiaryStore())
+    ContentView(store: KeyDiaryStore(), videoPlayer: KeyboardVideoPlayer())
 }

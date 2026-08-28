@@ -7,7 +7,9 @@ import SwiftUI
 
 struct KeyDiaryStatusBar: View {
     @Bindable var store: KeyDiaryStore
+    @Bindable var videoPlayer: KeyboardVideoPlayer
     @Binding var selection: KeyboardDisplayMode
+    @AppStorage(KeySoundPreferences.isEnabledStorageKey) private var isKeySoundEnabled = false
     @State private var isVideoFormatPresented = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -15,6 +17,7 @@ struct KeyDiaryStatusBar: View {
 
     let showCustomRange: () -> Void
     let openFloatingKeyboard: () -> Void
+    let openVideoPreview: () -> Void
 
     var body: some View {
         HStack(spacing: 0) {
@@ -24,6 +27,23 @@ struct KeyDiaryStatusBar: View {
 
             if selection == .live {
                 floatingKeyboardButton
+            } else if selection == .cinema {
+                cinemaVideoButton
+
+                barDivider
+                cinemaPlaybackButton
+                barDivider
+                cinemaPreviewButton
+                barDivider
+                cinemaColorModeButton
+                barDivider
+                cinemaFramingMenu
+                barDivider
+                cinemaInvertButton
+                barDivider
+                cinemaLoopButton
+                barDivider
+                cinemaExportButton
             } else {
                 DateRangeMenu(
                     store: store,
@@ -39,6 +59,8 @@ struct KeyDiaryStatusBar: View {
                     barDivider
                     PlaybackDurationMenu(store: store, tint: optionTint)
                         .disabled(store.isPlaybackVideoExportInProgress)
+                    barDivider
+                    playbackSoundButton
                     barDivider
                     playbackButton
                     barDivider
@@ -99,6 +121,233 @@ struct KeyDiaryStatusBar: View {
         .help(store.isPlaying ? "停止回放" : "回放时间轴选中区间")
     }
 
+    private var playbackSoundButton: some View {
+        Button {
+            isKeySoundEnabled.toggle()
+            if !isKeySoundEnabled {
+                store.stopPlaybackSounds()
+            }
+        } label: {
+            Label(
+                "声音",
+                systemImage: isKeySoundEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill"
+            )
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(isKeySoundEnabled ? themeColor : Color.secondary)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .frame(height: 52)
+            .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(.plain)
+        .disabled(store.isPlaybackVideoExportInProgress)
+        .help(isKeySoundEnabled ? "关闭回放和视频按键声音" : "启用回放和视频按键声音")
+        .accessibilityLabel("回放声音")
+        .accessibilityValue(isKeySoundEnabled ? "已启用" : "已关闭")
+        .accessibilityAddTraits(isKeySoundEnabled ? .isSelected : [])
+    }
+
+    private var cinemaVideoButton: some View {
+        Button {
+            guard let url = DataFilePanels.chooseKeyboardCinemaVideo() else { return }
+            videoPlayer.loadVideo(from: url)
+        } label: {
+            Label("选择视频", systemImage: "folder.badge.plus")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(themeColor)
+                .lineLimit(1)
+                .padding(.horizontal, 8)
+                .frame(height: 52)
+        }
+        .buttonStyle(.plain)
+        .disabled(videoPlayer.isLoading || videoPlayer.isVideoExportInProgress)
+        .help("选择其他视频并用键帽播放")
+    }
+
+    private var cinemaPlaybackButton: some View {
+        Button {
+            videoPlayer.togglePlayback()
+        } label: {
+            Label(
+                videoPlayer.isPlaying ? "暂停" : "播放",
+                systemImage: videoPlayer.isPlaying ? "pause.fill" : "play.fill"
+            )
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(themeColor)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .frame(height: 52)
+            .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(.plain)
+        .disabled(
+            !videoPlayer.hasVideo ||
+            videoPlayer.isLoading ||
+            videoPlayer.isVideoExportInProgress
+        )
+        .keyboardShortcut(.space, modifiers: [])
+        .help(videoPlayer.isPlaying ? "暂停像素视频" : "继续播放像素视频")
+    }
+
+    private var cinemaPreviewButton: some View {
+        Button(action: openVideoPreview) {
+            Label("原片窗", systemImage: "pip")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(themeColor)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .frame(height: 52)
+        }
+        .buttonStyle(.plain)
+        .disabled(!videoPlayer.hasVideo)
+        .help("打开与键盘同步的原片对照小窗")
+    }
+
+    private var cinemaInvertButton: some View {
+        Button {
+            videoPlayer.isInverted.toggle()
+        } label: {
+            Label("反相", systemImage: "circle.righthalf.filled")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(videoPlayer.isInverted ? themeColor : Color.secondary)
+                .lineLimit(1)
+                .padding(.horizontal, 8)
+                .frame(height: 52)
+        }
+        .buttonStyle(.plain)
+        .disabled(videoPlayer.isVideoExportInProgress)
+        .help(videoPlayer.isInverted ? "恢复视频颜色" : "反转视频颜色")
+        .accessibilityValue(videoPlayer.isInverted ? "已开启" : "已关闭")
+    }
+
+    private var cinemaColorModeButton: some View {
+        Button {
+            videoPlayer.colorMode = videoPlayer.colorMode == .color ? .binary : .color
+        } label: {
+            Label(
+                videoPlayer.colorMode.title,
+                systemImage: videoPlayer.colorMode == .binary
+                    ? "circle.lefthalf.filled"
+                    : "paintpalette.fill"
+            )
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(themeColor)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .frame(height: 52)
+            .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(.plain)
+        .disabled(!videoPlayer.hasVideo || videoPlayer.isVideoExportInProgress)
+        .help(videoPlayer.colorMode == .binary ? "切换到彩色采样" : "切换到无灰阶的黑白二值采样")
+        .accessibilityLabel("键帽颜色模式")
+        .accessibilityValue(videoPlayer.colorMode.title)
+    }
+
+    private var cinemaFramingMenu: some View {
+        Menu {
+            ForEach(KeyboardVideoFramingMode.allCases) { mode in
+                Button {
+                    videoPlayer.framingMode = mode
+                } label: {
+                    if videoPlayer.framingMode == mode {
+                        Label(mode.title, systemImage: "checkmark")
+                    } else {
+                        Text(mode.title)
+                    }
+                }
+                .help(mode.helpText)
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "aspectratio")
+                Text(videoPlayer.framingMode.title)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.secondary)
+            }
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(themeColor)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .frame(height: 52)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .disabled(!videoPlayer.hasVideo || videoPlayer.isVideoExportInProgress)
+        .help("取景范围：\(videoPlayer.framingMode.helpText)")
+        .accessibilityLabel("取景范围")
+        .accessibilityValue(videoPlayer.framingMode.title)
+    }
+
+    private var cinemaLoopButton: some View {
+        Button {
+            videoPlayer.loops.toggle()
+        } label: {
+            Label("循环", systemImage: "repeat")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(videoPlayer.loops ? themeColor : Color.secondary)
+                .lineLimit(1)
+                .padding(.horizontal, 8)
+                .frame(height: 52)
+        }
+        .buttonStyle(.plain)
+        .disabled(videoPlayer.isVideoExportInProgress)
+        .help(videoPlayer.loops ? "关闭循环播放" : "开启循环播放")
+        .accessibilityValue(videoPlayer.loops ? "已开启" : "已关闭")
+    }
+
+    @ViewBuilder
+    private var cinemaExportButton: some View {
+        if videoPlayer.isVideoExportInProgress {
+            Button {
+                videoPlayer.cancelVideoExport()
+            } label: {
+                HStack(spacing: 7) {
+                    ProgressView(value: videoPlayer.videoExportProgress)
+                        .progressViewStyle(.circular)
+                        .controlSize(.small)
+
+                    Text(videoPlayer.videoExportProgress, format: .percent.precision(.fractionLength(0)))
+                        .monospacedDigit()
+
+                    Image(systemName: "xmark.circle.fill")
+                }
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(themeColor)
+                .padding(.horizontal, 8)
+                .frame(height: 52)
+            }
+            .buttonStyle(.plain)
+            .help("取消像素视频导出")
+        } else {
+            Button {
+                isVideoFormatPresented.toggle()
+            } label: {
+                HStack(spacing: 5) {
+                    Label("导出", systemImage: "video.fill")
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.secondary)
+                }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(themeColor)
+                .lineLimit(1)
+                .padding(.horizontal, 8)
+                .frame(height: 52)
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $isVideoFormatPresented, arrowEdge: .bottom) {
+                PlaybackVideoExportPanel { settings in
+                    exportCinemaVideo(settings: settings)
+                }
+                .frame(width: 360)
+            }
+            .disabled(!videoPlayer.hasVideo || videoPlayer.isLoading)
+            .help("以当前黑白/彩色与取景设置导出键盘像素视频")
+        }
+    }
+
     @ViewBuilder
     private var playbackVideoButton: some View {
         if store.isPlaybackVideoExportInProgress {
@@ -154,6 +403,12 @@ struct KeyDiaryStatusBar: View {
         isVideoFormatPresented = false
         guard let url = DataFilePanels.choosePlaybackVideoFile(settings: settings) else { return }
         store.exportPlaybackVideo(settings: settings, to: url)
+    }
+
+    private func exportCinemaVideo(settings: PlaybackVideoSettings) {
+        isVideoFormatPresented = false
+        guard let url = DataFilePanels.chooseKeyboardCinemaExportFile(settings: settings) else { return }
+        videoPlayer.exportVideo(settings: settings, to: url)
     }
 
     private var barDivider: some View {
@@ -225,6 +480,7 @@ private struct DisplayModeTabs: View {
         case .live: "1"
         case .statistics: "2"
         case .playback: "3"
+        case .cinema: "4"
         }
     }
 }

@@ -36,6 +36,12 @@ private enum KeyboardMetrics {
     static let arrowKeySpacing: CGFloat = 3
 }
 
+private extension KeyboardPixel {
+    var swiftUIColor: Color {
+        Color(red: red, green: green, blue: blue)
+    }
+}
+
 struct KeyboardStage: View {
     let activeKeyDescription: String?
     let activeKeyCodes: Set<UInt16>
@@ -43,6 +49,7 @@ struct KeyboardStage: View {
     let isPlaying: Bool
     let keyCounts: [UInt16: Int]
     let alignsToTop: Bool
+    let pixelFrame: KeyboardPixelFrame?
 
     @State private var rotation = CGSize(width: -1.5, height: 7)
 
@@ -58,7 +65,8 @@ struct KeyboardStage: View {
             KeyboardModel(
                 activeKeyCodes: activeKeyCodes,
                 keyCounts: keyCounts,
-                maximumCount: maximumCount
+                maximumCount: maximumCount,
+                pixelFrame: pixelFrame
             )
             .environment(\.keyboardRenderScale, scale)
             .frame(width: modelWidth, height: modelHeight)
@@ -88,6 +96,7 @@ struct KeyboardStage: View {
         case .live: "实时 3D 键盘"
         case .statistics: "3D 键盘统计热力图"
         case .playback: "3D 键盘回放"
+        case .cinema: "键盘像素影院"
         }
     }
 
@@ -99,6 +108,8 @@ struct KeyboardStage: View {
             "峰值 \(maximumCount) 次"
         case .playback:
             isPlaying ? "正在回放 \(activeKeyDescription ?? "")" : "回放已停止"
+        case .cinema:
+            isPlaying ? "正在播放键帽像素视频" : "像素视频已暂停"
         }
     }
 }
@@ -107,6 +118,7 @@ private struct KeyboardModel: View {
     let activeKeyCodes: Set<UInt16>
     let keyCounts: [UInt16: Int]
     let maximumCount: Int
+    let pixelFrame: KeyboardPixelFrame?
     @Environment(\.keyboardRenderScale) private var renderScale
 
     var body: some View {
@@ -114,7 +126,8 @@ private struct KeyboardModel: View {
             KeyboardDeck(
                 activeKeyCodes: activeKeyCodes,
                 keyCounts: keyCounts,
-                maximumCount: maximumCount
+                maximumCount: maximumCount,
+                pixelFrame: pixelFrame
             )
             .frame(height: KeyboardMetrics.deckHeight * renderScale)
 
@@ -131,6 +144,7 @@ private struct KeyboardDeck: View {
     let activeKeyCodes: Set<UInt16>
     let keyCounts: [UInt16: Int]
     let maximumCount: Int
+    let pixelFrame: KeyboardPixelFrame?
     @Environment(\.keyboardRenderScale) private var renderScale
     @Environment(\.colorScheme) private var colorScheme
 
@@ -160,13 +174,16 @@ private struct KeyboardDeck: View {
                 )
 
             VStack(spacing: KeyboardMetrics.rowSpacing * renderScale) {
-                ForEach(Array(KeyboardLayout.rows.enumerated()), id: \.offset) { _, row in
+                ForEach(Array(KeyboardLayout.rows.enumerated()), id: \.offset) { rowIndex, row in
                     KeyboardRowView(
                         keys: row,
                         height: KeyboardMetrics.keyHeight * renderScale,
                         activeKeyCodes: activeKeyCodes,
                         keyCounts: keyCounts,
-                        maximumCount: maximumCount
+                        maximumCount: maximumCount,
+                        pixelColors: pixelFrame.map { frame in
+                            (0..<KeyboardPixelFrame.columnCount).map { frame[rowIndex, $0] }
+                        }
                     )
                 }
             }
@@ -181,6 +198,7 @@ private struct KeyboardRowView: View {
     let activeKeyCodes: Set<UInt16>
     let keyCounts: [UInt16: Int]
     let maximumCount: Int
+    let pixelColors: [KeyboardPixel]?
     @Environment(\.keyboardRenderScale) private var renderScale
 
     var body: some View {
@@ -190,7 +208,8 @@ private struct KeyboardRowView: View {
             let unit = (proxy.size.width - gap * CGFloat(keys.count - 1)) / totalUnits
 
             HStack(spacing: gap) {
-                ForEach(keys) { key in
+                ForEach(Array(keys.enumerated()), id: \.element.id) { keyIndex, key in
+                    let pixelColor = pixelColor(for: keyIndex)
                     Group {
                         if let pairedKeyCode = key.pairedKeyCode {
                             ArrowKeyPair(
@@ -198,14 +217,16 @@ private struct KeyboardRowView: View {
                                 pairedKeyCode: pairedKeyCode,
                                 keyCounts: keyCounts,
                                 maximumCount: maximumCount,
-                                activeKeyCodes: activeKeyCodes
+                                activeKeyCodes: activeKeyCodes,
+                                pixelColor: pixelColor
                             )
                         } else {
                             KeyboardKeyButton(
                                 key: key,
                                 count: key.keyCode.map { keyCounts[$0, default: 0] } ?? 0,
                                 maximumCount: maximumCount,
-                                isActive: key.keyCode.map(activeKeyCodes.contains) ?? false
+                                isActive: key.keyCode.map(activeKeyCodes.contains) ?? false,
+                                pixelColor: pixelColor
                             )
                         }
                     }
@@ -215,6 +236,13 @@ private struct KeyboardRowView: View {
         }
         .frame(height: height)
     }
+
+    private func pixelColor(for keyIndex: Int) -> KeyboardPixel? {
+        guard let pixelColors, !pixelColors.isEmpty else { return nil }
+        let normalizedCenter = (Double(keyIndex) + 0.5) / Double(keys.count)
+        let column = min(Int(normalizedCenter * Double(pixelColors.count)), pixelColors.count - 1)
+        return pixelColors[column]
+    }
 }
 
 private struct ArrowKeyPair: View {
@@ -223,6 +251,7 @@ private struct ArrowKeyPair: View {
     let keyCounts: [UInt16: Int]
     let maximumCount: Int
     let activeKeyCodes: Set<UInt16>
+    let pixelColor: KeyboardPixel?
     @Environment(\.keyboardRenderScale) private var renderScale
 
     private var downKey: KeyboardKey {
@@ -244,7 +273,8 @@ private struct ArrowKeyPair: View {
                     key: key,
                     count: key.keyCode.map { keyCounts[$0, default: 0] } ?? 0,
                     maximumCount: maximumCount,
-                    isActive: key.keyCode.map(activeKeyCodes.contains) ?? false
+                    isActive: key.keyCode.map(activeKeyCodes.contains) ?? false,
+                    pixelColor: pixelColor
                 )
                 .frame(maxWidth: .infinity)
                 .frame(height: arrowKeyHeight)
@@ -253,7 +283,8 @@ private struct ArrowKeyPair: View {
                     key: downKey,
                     count: keyCounts[pairedKeyCode, default: 0],
                     maximumCount: maximumCount,
-                    isActive: activeKeyCodes.contains(pairedKeyCode)
+                    isActive: activeKeyCodes.contains(pairedKeyCode),
+                    pixelColor: pixelColor
                 )
                 .frame(maxWidth: .infinity)
                 .frame(height: arrowKeyHeight)
@@ -268,12 +299,13 @@ private struct ArrowKeyHalfButton: View {
     let count: Int
     let maximumCount: Int
     let isActive: Bool
+    let pixelColor: KeyboardPixel?
 
     var body: some View {
         Button(action: {}) {
             KeyFace(key: key, count: count, isCompact: true)
         }
-        .buttonStyle(ArrowKeyHalfStyle(isActive: isActive, heat: heat))
+        .buttonStyle(ArrowKeyHalfStyle(isActive: isActive, heat: heat, pixelColor: pixelColor))
         .help(count == 0 ? key.accessibilityName : "\(key.accessibilityName)：\(count) 次")
         .accessibilityLabel(key.accessibilityName)
         .accessibilityValue("\(count) 次")
@@ -288,21 +320,23 @@ private struct ArrowKeyHalfButton: View {
 private struct ArrowKeyHalfStyle: ButtonStyle {
     let isActive: Bool
     let heat: Double
+    let pixelColor: KeyboardPixel?
     @Environment(\.keyboardRenderScale) private var renderScale
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.keyDiaryAccentColor) private var themeColor
     @Environment(\.keyDiaryAccentContrastColor) private var themeContrastColor
 
     func makeBody(configuration: Configuration) -> some View {
-        let pressed = configuration.isPressed || isActive
+        let pressed = pixelColor == nil && (configuration.isPressed || isActive)
         let cornerRadius = KeyboardMetrics.keyCornerRadius * renderScale
+        let keycapPixel = pixelColor?.keycapColor
 
         configuration.label
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background {
                 ZStack {
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .fill(pressed ? themeColor.opacity(0.62) : Color.black.opacity(colorScheme == .dark ? 0.72 : 0.38))
+                        .fill(keycapPixel?.adjustingBrightness(by: -0.12).swiftUIColor ?? (pressed ? themeColor.opacity(0.62) : Color.black.opacity(colorScheme == .dark ? 0.72 : 0.38)))
                         .offset(
                             y: (pressed ? KeyboardMetrics.pressedKeyDepth : KeyboardMetrics.keyDepth) * renderScale
                         )
@@ -310,7 +344,12 @@ private struct ArrowKeyHalfStyle: ButtonStyle {
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .fill(
                             LinearGradient(
-                                colors: pressed
+                                colors: pixelColor != nil
+                                    ? [
+                                        keycapPixel?.adjustingBrightness(by: 0.06).swiftUIColor ?? .clear,
+                                        keycapPixel?.adjustingBrightness(by: -0.025).swiftUIColor ?? .clear
+                                    ]
+                                    : pressed
                                     ? [themeColor.opacity(0.78), themeColor]
                                     : colorScheme == .dark
                                         ? [Color(white: 0.16), Color(white: 0.09)]
@@ -320,7 +359,7 @@ private struct ArrowKeyHalfStyle: ButtonStyle {
                             )
                         )
                         .overlay {
-                            if !pressed, heat > 0 {
+                            if pixelColor == nil, !pressed, heat > 0 {
                                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                                     .fill(themeColor.opacity(0.1 + heat * 0.34))
                             }
@@ -328,7 +367,9 @@ private struct ArrowKeyHalfStyle: ButtonStyle {
                         .overlay {
                             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                                 .stroke(
-                                    pressed ? themeColor.opacity(0.9) : .black.opacity(colorScheme == .dark ? 0.68 : 0.3),
+                                    pixelColor != nil
+                                        ? .black.opacity(0.36)
+                                        : pressed ? themeColor.opacity(0.9) : .black.opacity(colorScheme == .dark ? 0.68 : 0.3),
                                     lineWidth: renderScale
                                 )
                         }
@@ -344,13 +385,13 @@ private struct ArrowKeyHalfStyle: ButtonStyle {
                 }
             }
             .foregroundStyle(
-                pressed
+                pixelColor.map { $0.keycapColor.luminance >= 0.52 ? Color.black.opacity(0.64) : Color.white.opacity(0.78) } ?? (pressed
                     ? themeContrastColor
-                    : colorScheme == .dark ? Color.white.opacity(0.84) : Color.black.opacity(0.68)
+                    : colorScheme == .dark ? Color.white.opacity(0.84) : Color.black.opacity(0.68))
             )
             .contentShape(Rectangle())
             .offset(y: pressed ? KeyboardMetrics.pressedKeyOffset * renderScale : 0)
-            .animation(.spring(response: 0.14, dampingFraction: 0.6), value: pressed)
+            .animation(pixelColor == nil ? .spring(response: 0.14, dampingFraction: 0.6) : nil, value: pressed)
     }
 }
 
@@ -359,6 +400,7 @@ private struct KeyboardKeyButton: View {
     let count: Int
     let maximumCount: Int
     let isActive: Bool
+    let pixelColor: KeyboardPixel?
 
     var body: some View {
         Button(action: {}) {
@@ -368,7 +410,8 @@ private struct KeyboardKeyButton: View {
             ThreeDimensionalKeyStyle(
                 isActive: isActive,
                 heat: heat,
-                exteriorCorner: key.exteriorCorner
+                exteriorCorner: key.exteriorCorner,
+                pixelColor: pixelColor
             )
         )
         .help(count == 0 ? key.accessibilityName : "\(key.accessibilityName)：\(count) 次")
@@ -520,20 +563,22 @@ private struct ThreeDimensionalKeyStyle: ButtonStyle {
     let isActive: Bool
     let heat: Double
     let exteriorCorner: KeyCorner?
+    let pixelColor: KeyboardPixel?
     @Environment(\.keyboardRenderScale) private var renderScale
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.keyDiaryAccentColor) private var themeColor
     @Environment(\.keyDiaryAccentContrastColor) private var themeContrastColor
 
     func makeBody(configuration: Configuration) -> some View {
-        let pressed = configuration.isPressed || isActive
+        let pressed = pixelColor == nil && (configuration.isPressed || isActive)
         let cornerRadii = keyCornerRadii
+        let keycapPixel = pixelColor?.keycapColor
 
         configuration.label
             .background {
                 ZStack {
                     UnevenRoundedRectangle(cornerRadii: cornerRadii, style: .continuous)
-                        .fill(pressed ? themeColor.opacity(0.62) : Color.black.opacity(colorScheme == .dark ? 0.72 : 0.38))
+                        .fill(keycapPixel?.adjustingBrightness(by: -0.12).swiftUIColor ?? (pressed ? themeColor.opacity(0.62) : Color.black.opacity(colorScheme == .dark ? 0.72 : 0.38)))
                         .offset(
                             y: (pressed ? KeyboardMetrics.pressedKeyDepth : KeyboardMetrics.keyDepth) * renderScale
                         )
@@ -541,7 +586,12 @@ private struct ThreeDimensionalKeyStyle: ButtonStyle {
                     UnevenRoundedRectangle(cornerRadii: cornerRadii, style: .continuous)
                         .fill(
                             LinearGradient(
-                                colors: pressed
+                                colors: pixelColor != nil
+                                    ? [
+                                        keycapPixel?.adjustingBrightness(by: 0.06).swiftUIColor ?? .clear,
+                                        keycapPixel?.adjustingBrightness(by: -0.025).swiftUIColor ?? .clear
+                                    ]
+                                    : pressed
                                     ? [themeColor.opacity(0.78), themeColor]
                                     : colorScheme == .dark
                                         ? [Color(white: 0.16), Color(white: 0.09)]
@@ -551,7 +601,7 @@ private struct ThreeDimensionalKeyStyle: ButtonStyle {
                             )
                         )
                         .overlay {
-                            if !pressed, heat > 0 {
+                            if pixelColor == nil, !pressed, heat > 0 {
                                 UnevenRoundedRectangle(cornerRadii: cornerRadii, style: .continuous)
                                     .fill(themeColor.opacity(0.1 + heat * 0.34))
                             }
@@ -559,7 +609,9 @@ private struct ThreeDimensionalKeyStyle: ButtonStyle {
                         .overlay {
                             UnevenRoundedRectangle(cornerRadii: cornerRadii, style: .continuous)
                                 .stroke(
-                                    pressed ? themeColor.opacity(0.9) : .black.opacity(colorScheme == .dark ? 0.68 : 0.3),
+                                    pixelColor != nil
+                                        ? .black.opacity(0.36)
+                                        : pressed ? themeColor.opacity(0.9) : .black.opacity(colorScheme == .dark ? 0.68 : 0.3),
                                     lineWidth: renderScale
                                 )
                         }
@@ -575,12 +627,12 @@ private struct ThreeDimensionalKeyStyle: ButtonStyle {
                 }
             }
             .foregroundStyle(
-                pressed
+                pixelColor.map { $0.keycapColor.luminance >= 0.52 ? Color.black.opacity(0.64) : Color.white.opacity(0.78) } ?? (pressed
                     ? themeContrastColor
-                    : colorScheme == .dark ? Color.white.opacity(0.84) : Color.black.opacity(0.68)
+                    : colorScheme == .dark ? Color.white.opacity(0.84) : Color.black.opacity(0.68))
             )
             .offset(y: pressed ? KeyboardMetrics.pressedKeyOffset * renderScale : 0)
-            .animation(.spring(response: 0.14, dampingFraction: 0.6), value: pressed)
+            .animation(pixelColor == nil ? .spring(response: 0.14, dampingFraction: 0.6) : nil, value: pressed)
     }
 
     private var keyCornerRadii: RectangleCornerRadii {

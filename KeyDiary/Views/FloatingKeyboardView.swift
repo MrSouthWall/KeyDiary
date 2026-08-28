@@ -29,7 +29,8 @@ struct FloatingKeyboardView: View {
                 displayMode: .live,
                 isPlaying: false,
                 keyCounts: [:],
-                alignsToTop: false
+                alignsToTop: false,
+                pixelFrame: nil
             )
             .offset(y: -8)
             .padding(12)

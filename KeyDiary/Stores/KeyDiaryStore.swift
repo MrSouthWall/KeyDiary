@@ -25,6 +25,7 @@ final class KeyDiaryStore {
     }
 
     private let recorder = KeyboardRecorder()
+    private let playbackKeySoundPlayer = KeySoundPlayer()
     private let database: KeyDiaryDatabase
     private let dataTransferService = DataTransferService()
     private let playbackVideoExporter = PlaybackVideoExporter()
@@ -321,6 +322,7 @@ final class KeyDiaryStore {
         guard playbackRecordCount > 0, !isPlaybackVideoExportInProgress else { return }
 
         stopPlayback()
+        playbackKeySoundPlayer.resetSequence()
         let query = currentPlaybackQuery
         isPlaying = true
         playbackTask = Task { [weak self] in
@@ -348,6 +350,7 @@ final class KeyDiaryStore {
                         self.activePlaybackKey = record.key
                         self.activePlaybackKeyCode = record.keyCode
                     }
+                    self.playbackKeySoundPlayer.playUsingPreferences(keyCode: record.keyCode)
                     previousTimestamp = record.timestamp
                 }
 
@@ -372,9 +375,14 @@ final class KeyDiaryStore {
     func stopPlayback() {
         playbackTask?.cancel()
         playbackTask = nil
+        playbackKeySoundPlayer.stopAllSounds()
         isPlaying = false
         activePlaybackKey = nil
         activePlaybackKeyCode = nil
+    }
+
+    func stopPlaybackSounds() {
+        playbackKeySoundPlayer.stopAllSounds()
     }
 
     func exportPlaybackVideo(settings: PlaybackVideoSettings, to url: URL) {
@@ -392,6 +400,7 @@ final class KeyDiaryStore {
         let speed = playbackSpeed
         let dateRangeTitle = playbackExportRangeTitle
         let applicationTitle = selectedApplication
+        let keySoundConfiguration = KeySoundConfiguration.current
         let exporter = playbackVideoExporter
 
         playbackVideoExportTask = Task { [weak self] in
@@ -412,6 +421,7 @@ final class KeyDiaryStore {
                     dateRangeTitle: dateRangeTitle,
                     applicationTitle: applicationTitle,
                     settings: settings,
+                    keySoundConfiguration: keySoundConfiguration,
                     to: url
                 ) { [weak self] progress in
                     self?.playbackVideoExportProgress = progress

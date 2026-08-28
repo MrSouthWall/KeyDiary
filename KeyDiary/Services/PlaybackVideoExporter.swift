@@ -265,16 +265,24 @@ nonisolated struct PlaybackVideoConfiguration: Sendable {
 
 nonisolated enum PlaybackVideoExportError: LocalizedError {
     case noRecords
+    case noVideo
+    case cannotReadSource(String)
     case cannotCreateWriter(String)
     case cannotStartWriter(String)
     case cannotCreateFrame
     case cannotAppendFrame(String)
     case cannotFinishWriter(String)
+    case cannotCreateAudio(String)
+    case cannotMuxAudio(String)
 
     var errorDescription: String? {
         switch self {
         case .noRecords:
             "当前筛选范围内没有可录制的按键。"
+        case .noVideo:
+            "当前没有可导出的像素视频。"
+        case .cannotReadSource(let detail):
+            "无法读取原视频：\(detail)"
         case .cannotCreateWriter(let detail):
             "无法创建视频文件：\(detail)"
         case .cannotStartWriter(let detail):
@@ -285,6 +293,10 @@ nonisolated enum PlaybackVideoExportError: LocalizedError {
             "无法写入视频画面：\(detail)"
         case .cannotFinishWriter(let detail):
             "无法完成视频文件：\(detail)"
+        case .cannotCreateAudio(let detail):
+            "无法生成按键声音：\(detail)"
+        case .cannotMuxAudio(let detail):
+            "无法将按键声音写入视频：\(detail)"
         }
     }
 }
@@ -305,6 +317,7 @@ final class PlaybackVideoExporter {
         dateRangeTitle: String,
         applicationTitle: String,
         settings: PlaybackVideoSettings = .default,
+        keySoundConfiguration: KeySoundConfiguration? = nil,
         to url: URL,
         progress: ProgressHandler = { _ in }
     ) async throws {
@@ -319,10 +332,34 @@ final class PlaybackVideoExporter {
         }
 
         let configuration = configurationOverride ?? PlaybackVideoConfiguration(settings: settings)
+        let resolvedKeySoundConfiguration = keySoundConfiguration ?? .current
+        let includesAudio = resolvedKeySoundConfiguration.isEnabled
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeyDiaryVideoExport-\(UUID().uuidString)", isDirectory: true)
+        let videoURL = includesAudio
+            ? temporaryDirectory.appendingPathComponent("video.\(settings.filenameExtension)")
+            : url
+        let audioURL = temporaryDirectory.appendingPathComponent("key-sounds.m4a")
         let videoWriter = PlaybackVideoWriter(configuration: configuration, settings: settings)
 
+        if includesAudio {
+            do {
+                try FileManager.default.createDirectory(
+                    at: temporaryDirectory,
+                    withIntermediateDirectories: true
+                )
+            } catch {
+                throw PlaybackVideoExportError.cannotCreateWriter(error.localizedDescription)
+            }
+        }
+        defer {
+            if includesAudio {
+                try? FileManager.default.removeItem(at: temporaryDirectory)
+            }
+        }
+
         do {
-            try await videoWriter.start(to: url)
+            try await videoWriter.start(to: videoURL)
             let frameDuration = settings.frameRate.frameDuration.seconds
             let frameCount = max(Int(ceil(timeline.duration / frameDuration)), 1)
             var eventIndex = -1
@@ -351,14 +388,102 @@ final class PlaybackVideoExporter {
                     at: presentationTime,
                     videoWriter: videoWriter
                 )
-                progress(Double(frameIndex + 1) / Double(frameCount))
+                let videoProgress = Double(frameIndex + 1) / Double(frameCount)
+                progress(includesAudio ? videoProgress * 0.9 : videoProgress)
                 await Task.yield()
             }
 
             try await videoWriter.finish(at: timeline.duration)
+            if includesAudio {
+                let keySoundPlayer = KeySoundPlayer()
+                do {
+                    try await keySoundPlayer.renderPlaybackAudio(
+                        events: timeline.events,
+                        duration: timeline.duration,
+                        configuration: resolvedKeySoundConfiguration,
+                        to: audioURL
+                    )
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    throw PlaybackVideoExportError.cannotCreateAudio(error.localizedDescription)
+                }
+                progress(0.95)
+                try await mux(
+                    videoAt: videoURL,
+                    audioAt: audioURL,
+                    settings: settings,
+                    to: url
+                )
+                progress(1)
+            }
         } catch {
-            await videoWriter.cancel(removing: url)
+            await videoWriter.cancel(removing: videoURL)
+            if includesAudio {
+                try? FileManager.default.removeItem(at: url)
+            }
             throw error
+        }
+    }
+
+    private func mux(
+        videoAt videoURL: URL,
+        audioAt audioURL: URL,
+        settings: PlaybackVideoSettings,
+        to outputURL: URL
+    ) async throws {
+        do {
+            let videoAsset = AVURLAsset(url: videoURL)
+            let audioAsset = AVURLAsset(url: audioURL)
+            guard let sourceVideoTrack = try await videoAsset.loadTracks(withMediaType: .video).first,
+                  let sourceAudioTrack = try await audioAsset.loadTracks(withMediaType: .audio).first else {
+                throw PlaybackVideoExportError.cannotMuxAudio("临时媒体轨道不可用。")
+            }
+
+            let composition = AVMutableComposition()
+            guard let videoTrack = composition.addMutableTrack(
+                withMediaType: .video,
+                preferredTrackID: kCMPersistentTrackID_Invalid
+            ), let audioTrack = composition.addMutableTrack(
+                withMediaType: .audio,
+                preferredTrackID: kCMPersistentTrackID_Invalid
+            ) else {
+                throw PlaybackVideoExportError.cannotMuxAudio("无法创建音视频合成轨道。")
+            }
+
+            let videoDuration = try await videoAsset.load(.duration)
+            let audioDuration = try await audioAsset.load(.duration)
+            try videoTrack.insertTimeRange(
+                CMTimeRange(start: .zero, duration: videoDuration),
+                of: sourceVideoTrack,
+                at: .zero
+            )
+            videoTrack.preferredTransform = try await sourceVideoTrack.load(.preferredTransform)
+
+            let mixedDuration = CMTime(
+                seconds: min(videoDuration.seconds, audioDuration.seconds),
+                preferredTimescale: 120_000
+            )
+            try audioTrack.insertTimeRange(
+                CMTimeRange(start: .zero, duration: mixedDuration),
+                of: sourceAudioTrack,
+                at: .zero
+            )
+
+            if FileManager.default.fileExists(atPath: outputURL.path) {
+                try FileManager.default.removeItem(at: outputURL)
+            }
+            guard let exportSession = AVAssetExportSession(
+                asset: composition,
+                presetName: AVAssetExportPresetPassthrough
+            ) else {
+                throw PlaybackVideoExportError.cannotMuxAudio("无法创建音视频合成器。")
+            }
+            try await exportSession.export(to: outputURL, as: settings.container.fileType)
+        } catch let error as PlaybackVideoExportError {
+            throw error
+        } catch {
+            throw PlaybackVideoExportError.cannotMuxAudio(error.localizedDescription)
         }
     }
 
@@ -399,7 +524,7 @@ final class PlaybackVideoExporter {
     }
 }
 
-private actor PlaybackVideoWriter {
+actor PlaybackVideoWriter {
     private let configuration: PlaybackVideoConfiguration
     private let settings: PlaybackVideoSettings
     private var writer: AVAssetWriter?

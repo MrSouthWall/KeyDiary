@@ -341,12 +341,18 @@ final class KeyDiaryStoreTests: XCTestCase {
             speed: 1,
             dateRangeTitle: "今天",
             applicationTitle: "Notes",
+            keySoundConfiguration: KeySoundConfiguration(
+                isEnabled: true,
+                style: .cherryMXBrown,
+                volume: 0.55
+            ),
             to: url
         )
 
         let asset = AVURLAsset(url: url)
         let duration = try await asset.load(.duration)
         let tracks = try await asset.loadTracks(withMediaType: .video)
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
         let track = try XCTUnwrap(tracks.first)
         let size = try await track.load(.naturalSize)
         let nominalFrameRate = try await track.load(.nominalFrameRate)
@@ -375,6 +381,7 @@ final class KeyDiaryStoreTests: XCTestCase {
         XCTAssertEqual(size.width, 640)
         XCTAssertEqual(size.height, 360)
         XCTAssertEqual(nominalFrameRate, 30, accuracy: 0.1)
+        XCTAssertEqual(audioTracks.count, 1)
         XCTAssertLessThan(
             meanPixelDifference(sourceFrame, decodedFrame, verticallyMirrored: false),
             meanPixelDifference(sourceFrame, decodedFrame, verticallyMirrored: true)
