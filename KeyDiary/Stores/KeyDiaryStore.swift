@@ -202,6 +202,11 @@ final class KeyDiaryStore {
         stopRecorderAndFlush()
     }
 
+    func previewKeySound(styleRawValue: String, volume: Double) {
+        let style = KeySoundStyle(rawValue: styleRawValue) ?? KeySoundPreferences.defaultStyle
+        recorder.previewKeySound(style: style, volume: volume)
+    }
+
     func prepareForTermination() {
         playbackVideoExportTask?.cancel()
         recorder.stop()

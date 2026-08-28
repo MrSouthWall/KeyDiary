@@ -7,6 +7,96 @@ import XCTest
 
 @MainActor
 final class KeyDiaryStoreTests: XCTestCase {
+    func testKeySoundStylesAndPianoLayoutAreStable() {
+        XCTAssertEqual(KeySoundStyle.allCases, [
+            .mechanicalRed,
+            .mechanicalBrown,
+            .mechanicalBlue,
+            .pianoImprovisation,
+            .pianoKeyboard,
+            .pianoMelody
+        ])
+        XCTAssertEqual(KeySoundPreferences.defaultStyle, .mechanicalBrown)
+        XCTAssertEqual(KeySoundStyle(rawValue: "physicalKeyboard"), .mechanicalBrown)
+        XCTAssertEqual(KeySoundStyle(rawValue: "piano"), .pianoImprovisation)
+        XCTAssertEqual(KeySoundPlayer.pianoMIDINote(for: 0), 60)
+        XCTAssertEqual(KeySoundPlayer.pianoMIDINote(for: 1), 62)
+        XCTAssertEqual(KeySoundPlayer.pianoMIDINote(for: 14), 64)
+        XCTAssertEqual(KeySoundPlayer.pianoMIDINote(for: 12), 76)
+        XCTAssertEqual(KeySoundPlayer.pianoMIDINote(for: 49), 48)
+        XCTAssertEqual(KeySoundPlayer.pianoMIDINote(for: 36), 43)
+    }
+
+    func testMechanicalAndPianoStyleGroupsAreComplete() {
+        XCTAssertEqual(KeySoundStyle.mechanicalStyles, [
+            .mechanicalRed,
+            .mechanicalBrown,
+            .mechanicalBlue
+        ])
+        XCTAssertEqual(KeySoundStyle.pianoStyles, [
+            .pianoImprovisation,
+            .pianoKeyboard,
+            .pianoMelody
+        ])
+        XCTAssertTrue(KeySoundStyle.mechanicalStyles.allSatisfy(\.isMechanical))
+        XCTAssertTrue(KeySoundStyle.pianoStyles.allSatisfy { !$0.isMechanical })
+    }
+
+    func testPianoTypingMapUsesFrequencyRolesAndOnlyPentatonicNotes() {
+        XCTAssertEqual(KeySoundPlayer.pianoVoice(for: 14).role, .frequent) // E
+        XCTAssertEqual(KeySoundPlayer.pianoVoice(for: 8).role, .supporting) // C
+        XCTAssertEqual(KeySoundPlayer.pianoVoice(for: 6).role, .accent) // Z
+        XCTAssertEqual(KeySoundPlayer.pianoVoice(for: 49).role, .structural) // Space
+
+        let pentatonicPitchClasses: Set<Int> = [0, 2, 4, 7, 9]
+        for keyCode in UInt16(0)...UInt16(127) {
+            let voice = KeySoundPlayer.pianoVoice(for: keyCode)
+            XCTAssertTrue(
+                pentatonicPitchClasses.contains(voice.midiNote % 12),
+                "Key code \(keyCode) leaves the pentatonic scale"
+            )
+            XCTAssertTrue((43...93).contains(voice.midiNote))
+        }
+
+        let frequentLetterKeyCodes: [UInt16] = [14, 17, 0, 31, 34, 45, 1, 4, 15, 2, 37, 32, 5]
+        XCTAssertTrue(frequentLetterKeyCodes.allSatisfy {
+            (60...69).contains(KeySoundPlayer.pianoMIDINote(for: $0))
+        })
+    }
+
+    func testKeyboardPianoMapProvidesWhiteAndBlackKeysAcrossTwoRows() {
+        // Lower row: Z, S, X, D, C maps chromatically from C3.
+        XCTAssertEqual(KeySoundPlayer.keyboardPianoVoice(for: 6).midiNote, 48)
+        XCTAssertEqual(KeySoundPlayer.keyboardPianoVoice(for: 1).midiNote, 49)
+        XCTAssertEqual(KeySoundPlayer.keyboardPianoVoice(for: 7).midiNote, 50)
+        XCTAssertEqual(KeySoundPlayer.keyboardPianoVoice(for: 2).midiNote, 51)
+        XCTAssertEqual(KeySoundPlayer.keyboardPianoVoice(for: 8).midiNote, 52)
+
+        // Upper row: Q, 2, W, 3, E maps chromatically from C4.
+        XCTAssertEqual(KeySoundPlayer.keyboardPianoVoice(for: 12).midiNote, 60)
+        XCTAssertEqual(KeySoundPlayer.keyboardPianoVoice(for: 19).midiNote, 61)
+        XCTAssertEqual(KeySoundPlayer.keyboardPianoVoice(for: 13).midiNote, 62)
+        XCTAssertEqual(KeySoundPlayer.keyboardPianoVoice(for: 20).midiNote, 63)
+        XCTAssertEqual(KeySoundPlayer.keyboardPianoVoice(for: 14).midiNote, 64)
+    }
+
+    func testAutomaticMelodyLoopsThroughAConsonantPresetPhrase() {
+        let expectedOpening = [60, 64, 67, 69, 67, 64, 62, 64]
+        XCTAssertEqual(
+            (0..<expectedOpening.count).map { KeySoundPlayer.melodyPianoVoice(at: $0).midiNote },
+            expectedOpening
+        )
+        XCTAssertEqual(
+            KeySoundPlayer.melodyPianoVoice(at: 0).midiNote,
+            KeySoundPlayer.melodyPianoVoice(at: 48).midiNote
+        )
+
+        let pentatonicPitchClasses: Set<Int> = [0, 2, 4, 7, 9]
+        XCTAssertTrue((0..<48).allSatisfy {
+            pentatonicPitchClasses.contains(KeySoundPlayer.melodyPianoVoice(at: $0).midiNote % 12)
+        })
+    }
+
     func testRecentRangeRollsForwardAtMidnight() throws {
         let calendar = Calendar.current
         let firstDay = try XCTUnwrap(calendar.date(from: DateComponents(

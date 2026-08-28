@@ -8,6 +8,7 @@ import SwiftUI
 
 struct MenuBarView: View {
     @Bindable var store: KeyDiaryStore
+    @AppStorage(KeySoundPreferences.isEnabledStorageKey) private var isKeySoundEnabled = false
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -20,6 +21,13 @@ struct MenuBarView: View {
 
         Text("数据仅保存在本机")
             .foregroundStyle(.secondary)
+
+        Toggle(isOn: $isKeySoundEnabled) {
+            Label(
+                "按键声音",
+                systemImage: isKeySoundEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill"
+            )
+        }
 
         Button("打开 Key Diary") {
             openWindow(id: "main")

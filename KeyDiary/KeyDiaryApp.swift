@@ -11,10 +11,13 @@ import SwiftUI
 @main
 struct KeyDiaryApp: App {
     @NSApplicationDelegateAdaptor(KeyDiaryAppDelegate.self) private var appDelegate
+    @AppStorage(KeyDiaryTheme.appearanceStorageKey) private var appearanceRawValue = AppAppearance.system.rawValue
+    @AppStorage(KeyDiaryTheme.accentColorStorageKey) private var accentColorHex = KeyDiaryTheme.defaultAccentHex
 
     var body: some Scene {
         WindowGroup("Key Diary", id: "main") {
             ContentView(store: appDelegate.store)
+                .keyDiaryTheme(appearanceRawValue: appearanceRawValue, accentHex: accentColorHex)
         }
         .defaultSize(width: 1_180, height: 760)
         .defaultLaunchBehavior(.presented)
@@ -24,6 +27,7 @@ struct KeyDiaryApp: App {
 
         Window("实时悬浮键盘", id: "floating-keyboard") {
             FloatingKeyboardView(store: appDelegate.store)
+                .keyDiaryTheme(appearanceRawValue: appearanceRawValue, accentHex: accentColorHex)
         }
         .defaultSize(width: 900, height: 430)
         .windowStyle(.plain)
@@ -32,16 +36,19 @@ struct KeyDiaryApp: App {
 
         Window("数据编辑", id: "data-editor") {
             DataEditorView(store: appDelegate.store)
+                .keyDiaryTheme(appearanceRawValue: appearanceRawValue, accentHex: accentColorHex)
         }
         .defaultSize(width: 1_180, height: 720)
         .defaultLaunchBehavior(.suppressed)
 
         Settings {
             KeyDiarySettingsView(store: appDelegate.store)
+                .keyDiaryTheme(appearanceRawValue: appearanceRawValue, accentHex: accentColorHex)
         }
 
         MenuBarExtra {
             MenuBarView(store: appDelegate.store)
+                .keyDiaryTheme(appearanceRawValue: appearanceRawValue, accentHex: accentColorHex)
         } label: {
             Image(systemName: appDelegate.store.isRecording ? "keyboard.badge.ellipsis" : "keyboard")
         }

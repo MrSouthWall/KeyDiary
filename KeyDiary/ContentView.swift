@@ -13,6 +13,7 @@ struct ContentView: View {
     @Environment(\.dismissWindow) private var dismissWindow
     @Environment(\.openWindow) private var openWindow
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.keyDiaryAccentColor) private var themeColor
 
     @State private var displayMode: KeyboardDisplayMode = .live
     @State private var isShowingCustomRange = false
@@ -112,14 +113,14 @@ struct ContentView: View {
                 .fill(.background)
 
             RadialGradient(
-                colors: [.orange.opacity(0.1), .clear],
+                colors: [themeColor.opacity(0.1), .clear],
                 center: .center,
                 startRadius: 40,
                 endRadius: 520
             )
 
             LinearGradient(
-                colors: [.blue.opacity(0.035), .clear, .orange.opacity(0.025)],
+                colors: [themeColor.opacity(0.05), .clear, themeColor.opacity(0.025)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -165,11 +166,7 @@ struct ContentView: View {
     }
 
     private var modeAccentColor: Color {
-        switch displayMode {
-        case .live: .green
-        case .statistics: .blue
-        case .playback: .orange
-        }
+        themeColor
     }
 
     private var activeKeyDescription: String? {

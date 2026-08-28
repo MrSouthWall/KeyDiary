@@ -12,6 +12,7 @@ struct PlaybackVideoFrame: View {
     let applicationTitle: String
     let speed: Double
     let usesTransparentBackground: Bool
+    @Environment(\.keyDiaryAccentColor) private var themeColor
 
     var body: some View {
         ZStack {
@@ -48,14 +49,14 @@ struct PlaybackVideoFrame: View {
                 .fill(.background)
 
             RadialGradient(
-                colors: [Color.orange.opacity(0.1), .clear],
+                colors: [themeColor.opacity(0.1), .clear],
                 center: .center,
                 startRadius: 40,
                 endRadius: 850
             )
 
             LinearGradient(
-                colors: [Color.blue.opacity(0.035), .clear, Color.orange.opacity(0.025)],
+                colors: [themeColor.opacity(0.05), .clear, themeColor.opacity(0.025)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -67,7 +68,7 @@ struct PlaybackVideoFrame: View {
             HStack(spacing: 14) {
                 Image(systemName: "keyboard.badge.ellipsis")
                     .font(.system(size: 30, weight: .semibold))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(themeColor)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("KEY DIARY")
@@ -93,7 +94,7 @@ struct PlaybackVideoFrame: View {
             HStack(alignment: .lastTextBaseline) {
                 Text(activeRecord.map { "当前按键  \($0.key)" } ?? "回放完成")
                     .font(.system(size: 27, weight: .semibold, design: .rounded))
-                    .foregroundStyle(activeRecord == nil ? Color.secondary : Color.orange)
+                    .foregroundStyle(activeRecord == nil ? Color.secondary : themeColor)
 
                 Spacer()
 
@@ -111,7 +112,7 @@ struct PlaybackVideoFrame: View {
                     Capsule()
                         .fill(.white.opacity(0.13))
                     Capsule()
-                        .fill(.orange)
+                        .fill(themeColor)
                         .frame(width: proxy.size.width * min(max(progress, 0), 1))
                 }
             }

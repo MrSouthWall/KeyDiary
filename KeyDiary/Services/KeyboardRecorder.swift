@@ -8,6 +8,7 @@ import ApplicationServices
 
 @MainActor
 final class KeyboardRecorder {
+    private let keySoundPlayer = KeySoundPlayer()
     private var pressedKeys: [UInt16: String] = [:]
     private var pressedModifierKeyCodes: Set<UInt16> = []
     private lazy var quartzKeyboardMonitor = QuartzKeyboardMonitor(
@@ -66,7 +67,7 @@ final class KeyboardRecorder {
             guard event.keyCode != 57 else { return }
             let key = KeyCodeResolver.label(for: event)
             setPressed(true, keyCode: event.keyCode, key: key)
-            record(keyCode: event.keyCode, key: key)
+            record(keyCode: event.keyCode, key: key, playsSound: !event.isARepeat)
 
         case .keyUp:
             guard event.keyCode != 57 else { return }
@@ -80,7 +81,11 @@ final class KeyboardRecorder {
             let key = resolvedEvent.key
             setPressed(resolvedEvent.phase.isPressed, keyCode: key.keyCode, key: key.label)
             if resolvedEvent.phase.shouldRecord {
-                record(keyCode: key.keyCode, key: key.label)
+                record(
+                    keyCode: key.keyCode,
+                    key: key.label,
+                    playsSound: resolvedEvent.phase == .down
+                )
             }
 
         default:
@@ -130,7 +135,14 @@ final class KeyboardRecorder {
         onPressedKeysChanged?(pressedKeys)
     }
 
-    private func record(keyCode: UInt16, key: String) {
+    func previewKeySound(style: KeySoundStyle, volume: Double) {
+        keySoundPlayer.preview(keyCode: 0, style: style, volume: volume)
+    }
+
+    private func record(keyCode: UInt16, key: String, playsSound: Bool = true) {
+        if playsSound {
+            keySoundPlayer.playUsingPreferences(keyCode: keyCode)
+        }
         let application = NSWorkspace.shared.frontmostApplication
         let record = KeyPressRecord(
             timestamp: .now,

@@ -310,6 +310,8 @@ final class PlaybackVideoExporter {
     ) async throws {
         let timeline = PlaybackVideoTimeline(records: records, speed: speed)
         guard !timeline.events.isEmpty else { throw PlaybackVideoExportError.noRecords }
+        let accentHex = UserDefaults.standard.string(forKey: KeyDiaryTheme.accentColorStorageKey)
+            ?? KeyDiaryTheme.defaultAccentHex
 
         let accessed = url.startAccessingSecurityScopedResource()
         defer {
@@ -344,6 +346,7 @@ final class PlaybackVideoExporter {
                     applicationTitle: applicationTitle,
                     speed: speed,
                     settings: settings,
+                    accentHex: accentHex,
                     configuration: configuration,
                     at: presentationTime,
                     videoWriter: videoWriter
@@ -366,6 +369,7 @@ final class PlaybackVideoExporter {
         applicationTitle: String,
         speed: Double,
         settings: PlaybackVideoSettings,
+        accentHex: String,
         configuration: PlaybackVideoConfiguration,
         at presentationTime: CMTime,
         videoWriter: PlaybackVideoWriter
@@ -379,6 +383,7 @@ final class PlaybackVideoExporter {
             usesTransparentBackground: settings.preservesAlpha
         )
         .frame(width: CGFloat(configuration.width), height: CGFloat(configuration.height))
+        .keyDiaryAccent(hex: accentHex)
 
         let renderer = ImageRenderer(content: view)
         renderer.proposedSize = ProposedViewSize(

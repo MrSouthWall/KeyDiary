@@ -8,6 +8,12 @@ import SwiftUI
 struct KeyDiarySettingsView: View {
     @Bindable var store: KeyDiaryStore
 
+    @AppStorage(KeyDiaryTheme.appearanceStorageKey) private var appearanceRawValue = AppAppearance.system.rawValue
+    @AppStorage(KeyDiaryTheme.accentColorStorageKey) private var accentColorHex = KeyDiaryTheme.defaultAccentHex
+    @AppStorage(KeySoundPreferences.isEnabledStorageKey) private var isKeySoundEnabled = false
+    @AppStorage(KeySoundPreferences.styleStorageKey) private var keySoundStyleRawValue = KeySoundPreferences.defaultStyle.rawValue
+    @AppStorage(KeySoundPreferences.volumeStorageKey) private var keySoundVolume = KeySoundPreferences.defaultVolume
+
     @Environment(\.openWindow) private var openWindow
 
     @State private var isShowingClearConfirmation = false
@@ -16,6 +22,35 @@ struct KeyDiarySettingsView: View {
 
     var body: some View {
         Form {
+            Section("外观") {
+                LabeledContent("显示模式") {
+                    Picker("显示模式", selection: $appearanceRawValue) {
+                        ForEach(AppAppearance.allCases) { appearance in
+                            Label(appearance.title, systemImage: appearance.systemImage)
+                                .tag(appearance.rawValue)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                }
+
+                LabeledContent("主题色") {
+                    HStack(spacing: 10) {
+                        ColorPicker(
+                            "主题色",
+                            selection: accentColorBinding,
+                            supportsOpacity: false
+                        )
+                        .labelsHidden()
+
+                        Button("恢复默认") {
+                            accentColorHex = KeyDiaryTheme.defaultAccentHex
+                        }
+                        .disabled(accentColorHex == KeyDiaryTheme.defaultAccentHex)
+                    }
+                }
+            }
+
             Section("记录") {
                 LabeledContent("状态") {
                     HStack(spacing: 6) {
@@ -44,6 +79,69 @@ struct KeyDiarySettingsView: View {
                             .buttonStyle(.borderedProminent)
                         }
                     }
+                }
+            }
+
+            Section("按键声音") {
+                Toggle("按下按键时播放声音", isOn: $isKeySoundEnabled)
+
+                LabeledContent("音色") {
+                    Picker("音色", selection: $keySoundStyleRawValue) {
+                        Section("机械键盘") {
+                            ForEach(KeySoundStyle.mechanicalStyles) { style in
+                                Label(style.title, systemImage: style.systemImage)
+                                    .tag(style.rawValue)
+                            }
+                        }
+
+                        Section("钢琴") {
+                            ForEach(KeySoundStyle.pianoStyles) { style in
+                                Label(style.title, systemImage: style.systemImage)
+                                    .tag(style.rawValue)
+                            }
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                }
+                .disabled(!isKeySoundEnabled)
+
+                LabeledContent("音量") {
+                    HStack(spacing: 10) {
+                        Image(systemName: "speaker.fill")
+                            .foregroundStyle(.secondary)
+
+                        Slider(value: $keySoundVolume, in: 0.05...1)
+                            .frame(width: 185)
+
+                        Text(keySoundVolume, format: .percent.precision(.fractionLength(0)))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                            .frame(width: 38, alignment: .trailing)
+                    }
+                }
+                .disabled(!isKeySoundEnabled)
+
+                HStack(alignment: .firstTextBaseline) {
+                    Text("\(selectedKeySoundStyle.detail) 仅在自动记录运行时触发。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    Button("试听") {
+                        store.previewKeySound(
+                            styleRawValue: keySoundStyleRawValue,
+                            volume: keySoundVolume
+                        )
+                    }
+                }
+
+                if let usageHint = selectedKeySoundStyle.usageHint {
+                    Text(usageHint)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
                 }
             }
 
@@ -92,6 +190,7 @@ struct KeyDiarySettingsView: View {
                     Button("清除全部记录…", role: .destructive) {
                         isShowingClearConfirmation = true
                     }
+                    .tint(.red)
                     .disabled(
                         store.recordCount == 0 ||
                         store.isDataTransferInProgress ||
@@ -101,7 +200,7 @@ struct KeyDiarySettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 500, height: 420)
+        .frame(width: 520, height: 720)
         .onAppear {
             store.refreshInputMonitoringStatus()
         }
@@ -147,6 +246,17 @@ struct KeyDiarySettingsView: View {
                 shouldRecord ? store.startRecording() : store.stopRecording()
             }
         )
+    }
+
+    private var accentColorBinding: Binding<Color> {
+        Binding(
+            get: { KeyDiaryTheme.color(for: accentColorHex) },
+            set: { accentColorHex = KeyDiaryTheme.hexString(from: $0) }
+        )
+    }
+
+    private var selectedKeySoundStyle: KeySoundStyle {
+        KeySoundStyle(rawValue: keySoundStyleRawValue) ?? KeySoundPreferences.defaultStyle
     }
 
     private var importMenu: some View {

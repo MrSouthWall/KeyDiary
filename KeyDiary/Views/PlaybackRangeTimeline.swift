@@ -8,6 +8,8 @@ import SwiftUI
 struct PlaybackRangeTimeline: View {
     @Bindable var store: KeyDiaryStore
 
+    @Environment(\.keyDiaryAccentColor) private var themeColor
+
     @State private var transientStartFraction: Double?
     @State private var transientEndFraction: Double?
     @State private var activeDragTarget: PlaybackRangeDragTarget?
@@ -40,7 +42,7 @@ struct PlaybackRangeTimeline: View {
         HStack(spacing: 10) {
             Label("回放片段", systemImage: "timeline.selection")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.orange)
+                .foregroundStyle(themeColor)
 
             Text("\(store.playbackRecordCount.formatted()) 次按键 · 回放约 \(store.estimatedPlaybackDurationTitle)")
                 .font(.caption.monospacedDigit())
@@ -58,7 +60,7 @@ struct PlaybackRangeTimeline: View {
             }
             .buttonStyle(.plain)
             .font(.caption.weight(.medium))
-            .foregroundStyle(store.isFullPlaybackRangeSelected ? Color.secondary : Color.orange)
+            .foregroundStyle(store.isFullPlaybackRangeSelected ? Color.secondary : themeColor)
             .disabled(store.isFullPlaybackRangeSelected)
             .help("恢复完整回放区间")
         }
@@ -80,7 +82,7 @@ struct PlaybackRangeTimeline: View {
                     .foregroundStyle(.tertiary)
                 Text(selectedRangeDurationTitle)
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(themeColor)
                     .contentTransition(.numericText())
             }
 
@@ -125,14 +127,14 @@ struct PlaybackRangeTimeline: View {
                     .allowsHitTesting(false)
 
                 RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(Color.orange.gradient)
+                    .fill(themeColor.gradient)
                     .frame(width: selectionWidth, height: 10)
                     .offset(x: startX, y: 13)
                     .allowsHitTesting(false)
 
                 if !store.isFullPlaybackRangeSelected {
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(Color.orange.opacity(
+                        .fill(themeColor.opacity(
                             activeDragTarget == .selection ? 0.13 : 0.001
                         ))
                         .frame(width: selectionWidth, height: 30)
@@ -421,6 +423,7 @@ private struct PlaybackRangeDragOrigin {
 private struct PlaybackRangeHandle: View {
     let isActive: Bool
     let isHovered: Bool
+    @Environment(\.keyDiaryAccentColor) private var themeColor
 
     var body: some View {
         ZStack {
@@ -430,7 +433,7 @@ private struct PlaybackRangeHandle: View {
                 .overlay {
                     RoundedRectangle(cornerRadius: 5, style: .continuous)
                         .stroke(
-                            Color.orange.opacity(isActive || isHovered ? 1 : 0.82),
+                            themeColor.opacity(isActive || isHovered ? 1 : 0.82),
                             lineWidth: isActive ? 2 : 1
                         )
                 }
@@ -441,7 +444,7 @@ private struct PlaybackRangeHandle: View {
                 )
 
             Capsule()
-                .fill(Color.orange)
+                .fill(themeColor)
                 .frame(width: 3, height: 18)
         }
         .frame(width: 38, height: 46)

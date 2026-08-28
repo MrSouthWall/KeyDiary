@@ -11,6 +11,7 @@ struct FloatingKeyboardView: View {
 
     @Environment(\.dismissWindow) private var dismissWindow
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.keyDiaryAccentColor) private var themeColor
     @State private var isPointerInside = false
 
     var body: some View {
@@ -110,7 +111,7 @@ struct FloatingKeyboardView: View {
                 .fill(.background)
 
             RadialGradient(
-                colors: [.orange.opacity(0.1), .clear],
+                colors: [themeColor.opacity(0.1), .clear],
                 center: .center,
                 startRadius: 30,
                 endRadius: 420

@@ -132,6 +132,7 @@ private struct KeyboardDeck: View {
     let keyCounts: [UInt16: Int]
     let maximumCount: Int
     @Environment(\.keyboardRenderScale) private var renderScale
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ZStack {
@@ -139,9 +140,9 @@ private struct KeyboardDeck: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color(white: 0.91),
-                            Color(red: 0.63, green: 0.65, blue: 0.66),
-                            Color(red: 0.84, green: 0.85, blue: 0.85)
+                            colorScheme == .dark ? Color(red: 0.72, green: 0.73, blue: 0.74) : Color(white: 0.91),
+                            colorScheme == .dark ? Color(red: 0.46, green: 0.47, blue: 0.48) : Color(red: 0.63, green: 0.65, blue: 0.66),
+                            colorScheme == .dark ? Color(red: 0.64, green: 0.65, blue: 0.66) : Color(red: 0.84, green: 0.85, blue: 0.85)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
@@ -149,10 +150,14 @@ private struct KeyboardDeck: View {
                 )
                 .overlay {
                     RoundedRectangle(cornerRadius: KeyboardMetrics.deckCornerRadius * renderScale, style: .continuous)
-                        .stroke(.white.opacity(0.72), lineWidth: 1.2 * renderScale)
+                        .stroke(.white.opacity(colorScheme == .dark ? 0.42 : 0.72), lineWidth: 1.2 * renderScale)
                         .padding(renderScale)
                 }
-                .shadow(color: .black.opacity(0.28), radius: 2 * renderScale, y: 5 * renderScale)
+                .shadow(
+                    color: .black.opacity(colorScheme == .dark ? 0.46 : 0.28),
+                    radius: 2 * renderScale,
+                    y: 5 * renderScale
+                )
 
             VStack(spacing: KeyboardMetrics.rowSpacing * renderScale) {
                 ForEach(Array(KeyboardLayout.rows.enumerated()), id: \.offset) { _, row in
@@ -284,6 +289,9 @@ private struct ArrowKeyHalfStyle: ButtonStyle {
     let isActive: Bool
     let heat: Double
     @Environment(\.keyboardRenderScale) private var renderScale
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.keyDiaryAccentColor) private var themeColor
+    @Environment(\.keyDiaryAccentContrastColor) private var themeContrastColor
 
     func makeBody(configuration: Configuration) -> some View {
         let pressed = configuration.isPressed || isActive
@@ -294,7 +302,7 @@ private struct ArrowKeyHalfStyle: ButtonStyle {
             .background {
                 ZStack {
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .fill(pressed ? Color(red: 0.72, green: 0.27, blue: 0.02) : Color.black.opacity(0.38))
+                        .fill(pressed ? themeColor.opacity(0.62) : Color.black.opacity(colorScheme == .dark ? 0.72 : 0.38))
                         .offset(
                             y: (pressed ? KeyboardMetrics.pressedKeyDepth : KeyboardMetrics.keyDepth) * renderScale
                         )
@@ -303,8 +311,10 @@ private struct ArrowKeyHalfStyle: ButtonStyle {
                         .fill(
                             LinearGradient(
                                 colors: pressed
-                                    ? [Color(red: 1.0, green: 0.62, blue: 0.16), Color(red: 0.95, green: 0.34, blue: 0.04)]
-                                    : [Color(white: 1.0), Color(white: 0.9)],
+                                    ? [themeColor.opacity(0.78), themeColor]
+                                    : colorScheme == .dark
+                                        ? [Color(white: 0.16), Color(white: 0.09)]
+                                        : [Color(white: 1.0), Color(white: 0.9)],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
@@ -312,18 +322,18 @@ private struct ArrowKeyHalfStyle: ButtonStyle {
                         .overlay {
                             if !pressed, heat > 0 {
                                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                                    .fill(Color.orange.opacity(0.1 + heat * 0.34))
+                                    .fill(themeColor.opacity(0.1 + heat * 0.34))
                             }
                         }
                         .overlay {
                             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                                 .stroke(
-                                    pressed ? Color.orange.opacity(0.9) : .black.opacity(0.3),
+                                    pressed ? themeColor.opacity(0.9) : .black.opacity(colorScheme == .dark ? 0.68 : 0.3),
                                     lineWidth: renderScale
                                 )
                         }
                         .shadow(
-                            color: pressed ? Color.orange.opacity(0.34) : .black.opacity(0.18),
+                            color: pressed ? themeColor.opacity(0.34) : .black.opacity(colorScheme == .dark ? 0.34 : 0.18),
                             radius: (pressed
                                 ? KeyboardMetrics.pressedKeyShadowRadius
                                 : KeyboardMetrics.keyShadowRadius) * renderScale,
@@ -333,7 +343,11 @@ private struct ArrowKeyHalfStyle: ButtonStyle {
                         )
                 }
             }
-            .foregroundStyle(pressed ? Color.white : Color.black.opacity(0.68))
+            .foregroundStyle(
+                pressed
+                    ? themeContrastColor
+                    : colorScheme == .dark ? Color.white.opacity(0.84) : Color.black.opacity(0.68)
+            )
             .contentShape(Rectangle())
             .offset(y: pressed ? KeyboardMetrics.pressedKeyOffset * renderScale : 0)
             .animation(.spring(response: 0.14, dampingFraction: 0.6), value: pressed)
@@ -373,6 +387,7 @@ private struct KeyFace: View {
     let count: Int
     let isCompact: Bool
     @Environment(\.keyboardRenderScale) private var renderScale
+    @Environment(\.keyDiaryAccentColor) private var themeColor
 
     init(key: KeyboardKey, count: Int, isCompact: Bool = false) {
         self.key = key
@@ -388,7 +403,7 @@ private struct KeyFace: View {
             if count > 0 {
                 Text(compactCount)
                     .font(.system(size: (isCompact ? 6.5 : 8) * renderScale, weight: .bold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(themeColor)
                     .padding(.horizontal, (isCompact ? 2.5 : 4) * renderScale)
                     .frame(
                         minWidth: (isCompact ? 11 : 15) * renderScale,
@@ -506,6 +521,9 @@ private struct ThreeDimensionalKeyStyle: ButtonStyle {
     let heat: Double
     let exteriorCorner: KeyCorner?
     @Environment(\.keyboardRenderScale) private var renderScale
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.keyDiaryAccentColor) private var themeColor
+    @Environment(\.keyDiaryAccentContrastColor) private var themeContrastColor
 
     func makeBody(configuration: Configuration) -> some View {
         let pressed = configuration.isPressed || isActive
@@ -515,7 +533,7 @@ private struct ThreeDimensionalKeyStyle: ButtonStyle {
             .background {
                 ZStack {
                     UnevenRoundedRectangle(cornerRadii: cornerRadii, style: .continuous)
-                        .fill(pressed ? Color(red: 0.72, green: 0.27, blue: 0.02) : Color.black.opacity(0.38))
+                        .fill(pressed ? themeColor.opacity(0.62) : Color.black.opacity(colorScheme == .dark ? 0.72 : 0.38))
                         .offset(
                             y: (pressed ? KeyboardMetrics.pressedKeyDepth : KeyboardMetrics.keyDepth) * renderScale
                         )
@@ -524,8 +542,10 @@ private struct ThreeDimensionalKeyStyle: ButtonStyle {
                         .fill(
                             LinearGradient(
                                 colors: pressed
-                                    ? [Color(red: 1.0, green: 0.62, blue: 0.16), Color(red: 0.95, green: 0.34, blue: 0.04)]
-                                    : [Color(white: 1.0), Color(white: 0.9)],
+                                    ? [themeColor.opacity(0.78), themeColor]
+                                    : colorScheme == .dark
+                                        ? [Color(white: 0.16), Color(white: 0.09)]
+                                        : [Color(white: 1.0), Color(white: 0.9)],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
@@ -533,18 +553,18 @@ private struct ThreeDimensionalKeyStyle: ButtonStyle {
                         .overlay {
                             if !pressed, heat > 0 {
                                 UnevenRoundedRectangle(cornerRadii: cornerRadii, style: .continuous)
-                                    .fill(Color.orange.opacity(0.1 + heat * 0.34))
+                                    .fill(themeColor.opacity(0.1 + heat * 0.34))
                             }
                         }
                         .overlay {
                             UnevenRoundedRectangle(cornerRadii: cornerRadii, style: .continuous)
                                 .stroke(
-                                    pressed ? Color.orange.opacity(0.9) : .black.opacity(0.3),
+                                    pressed ? themeColor.opacity(0.9) : .black.opacity(colorScheme == .dark ? 0.68 : 0.3),
                                     lineWidth: renderScale
                                 )
                         }
                         .shadow(
-                            color: pressed ? Color.orange.opacity(0.34) : .black.opacity(0.18),
+                            color: pressed ? themeColor.opacity(0.34) : .black.opacity(colorScheme == .dark ? 0.34 : 0.18),
                             radius: (pressed
                                 ? KeyboardMetrics.pressedKeyShadowRadius
                                 : KeyboardMetrics.keyShadowRadius) * renderScale,
@@ -554,7 +574,11 @@ private struct ThreeDimensionalKeyStyle: ButtonStyle {
                         )
                 }
             }
-            .foregroundStyle(pressed ? Color.white : Color.black.opacity(0.68))
+            .foregroundStyle(
+                pressed
+                    ? themeContrastColor
+                    : colorScheme == .dark ? Color.white.opacity(0.84) : Color.black.opacity(0.68)
+            )
             .offset(y: pressed ? KeyboardMetrics.pressedKeyOffset * renderScale : 0)
             .animation(.spring(response: 0.14, dampingFraction: 0.6), value: pressed)
     }

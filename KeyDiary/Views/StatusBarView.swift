@@ -11,6 +11,7 @@ struct KeyDiaryStatusBar: View {
     @State private var isVideoFormatPresented = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.keyDiaryAccentColor) private var themeColor
 
     let showCustomRange: () -> Void
     let openFloatingKeyboard: () -> Void
@@ -58,7 +59,7 @@ struct KeyDiaryStatusBar: View {
     }
 
     private var optionTint: Color {
-        selection == .playback ? .orange : .blue
+        themeColor
     }
 
     private var floatingKeyboardButton: some View {
@@ -84,7 +85,7 @@ struct KeyDiaryStatusBar: View {
                 systemImage: store.isPlaying ? "stop.fill" : "play.fill"
             )
             .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(.orange)
+            .foregroundStyle(themeColor)
             .lineLimit(1)
             .padding(.horizontal, 9)
             .frame(height: 52)
@@ -115,7 +116,7 @@ struct KeyDiaryStatusBar: View {
                     Image(systemName: "xmark.circle.fill")
                 }
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.orange)
+                .foregroundStyle(themeColor)
                 .padding(.horizontal, 10)
                 .frame(height: 52)
             }
@@ -132,7 +133,7 @@ struct KeyDiaryStatusBar: View {
                         .foregroundStyle(.secondary)
                 }
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.orange)
+                .foregroundStyle(themeColor)
                 .lineLimit(1)
                 .padding(.horizontal, 8)
                 .frame(height: 52)
@@ -165,6 +166,7 @@ struct KeyDiaryStatusBar: View {
 
 private struct DisplayModeTabs: View {
     @Binding var selection: KeyboardDisplayMode
+    @Environment(\.keyDiaryAccentColor) private var themeColor
 
     var body: some View {
         HStack(spacing: 2) {
@@ -211,11 +213,7 @@ private struct DisplayModeTabs: View {
     }
 
     private func accentColor(for mode: KeyboardDisplayMode) -> Color {
-        switch mode {
-        case .live: .green
-        case .statistics: .blue
-        case .playback: .orange
-        }
+        themeColor
     }
 
     private func keyEquivalent(for mode: KeyboardDisplayMode) -> KeyEquivalent {
