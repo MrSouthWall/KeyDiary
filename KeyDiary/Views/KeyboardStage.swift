@@ -43,6 +43,31 @@ private enum KeyboardMetrics {
     static let pressedKeyShadowOffset: CGFloat = 1
     static let pressedKeyOffset: CGFloat = 3
     static let arrowKeySpacing: CGFloat = 3
+
+    // Keycap typography. Keep these values together so the entire keyboard can
+    // be tuned without hunting through the individual face layouts below.
+    static let primaryLabelFontSize: CGFloat = 19
+    static let secondaryLabelFontSize: CGFloat = 11
+    static let functionLabelFontSize: CGFloat = 9
+    static let functionLabelLineHeight: CGFloat = 12
+    static let functionIconSlotWidth: CGFloat = 22
+    static let functionIconSlotHeight: CGFloat = 16
+    static let functionContentSpacing: CGFloat = 11
+    static let modifierLabelFontSize: CGFloat = 12
+    static let symbolPairFontSize: CGFloat = 14
+    static let symbolPairLineHeight: CGFloat = 17
+    static let cornerLabelFontSize: CGFloat = 14
+    static let functionCornerLabelFontSize: CGFloat = 12
+    static let numberRowNumberFontSize: CGFloat = 18
+    static let numberRowSymbolFontSize: CGFloat = 13
+    static let capsIndicatorDiameter: CGFloat = 5
+    static let capsIndicatorInset: CGFloat = 9
+    static let capsLabelBottomInset: CGFloat = 9
+
+    // Bottom-row widths are calibrated against the row above so the space bar
+    // starts at C's leading edge and ends at M's trailing edge.
+    static let bottomModifierKeyWidth: CGFloat = 1.0515
+    static let spaceKeyWidth: CGFloat = 5.7956
 }
 
 private extension KeyboardPixel {
@@ -130,7 +155,7 @@ struct KeyboardStage: View {
     let pixelFrame: KeyboardPixelFrame?
     let pixelColorMode: KeyboardPixelColorMode?
 
-    @State private var rotation = CGSize(width: -1.5, height: 7)
+    @State private var rotation = CGSize(width: 0, height: 7)
 
     private var maximumCount: Int { keyCounts.values.max() ?? 0 }
 
@@ -157,12 +182,12 @@ struct KeyboardStage: View {
             .simultaneousGesture(
                 DragGesture(minimumDistance: 5)
                     .onChanged { value in
-                        rotation.width = min(max(-1.5 + value.translation.width / 34, -9), 9)
+                        rotation.width = min(max(value.translation.width / 34, -9), 9)
                         rotation.height = min(max(7 + value.translation.height / 38, 2), 14)
                     }
                     .onEnded { _ in
                         withAnimation(.spring(response: 0.45, dampingFraction: 0.72)) {
-                            rotation = CGSize(width: -1.5, height: 7)
+                            rotation = CGSize(width: 0, height: 7)
                         }
                     }
             )
@@ -525,7 +550,7 @@ private struct KeyFace: View {
 
             if count > 0 {
                 Text(compactCount)
-                    .font(.system(size: (isCompact ? 6.5 : 8) * renderScale, weight: .bold, design: .rounded).monospacedDigit())
+                    .font(.system(size: (isCompact ? 6.5 : 8) * renderScale, weight: .semibold, design: .default).monospacedDigit())
                     .foregroundStyle(themeColor)
                     .padding(.horizontal, (isCompact ? 2.5 : 4) * renderScale)
                     .frame(
@@ -545,33 +570,75 @@ private struct KeyFace: View {
         case .centered:
             VStack(spacing: key.secondary == nil ? 0 : renderScale) {
                 Text(key.primary)
-                    .font(.system(size: 16 * renderScale, weight: .regular, design: .rounded))
+                    .font(.system(size: KeyboardMetrics.primaryLabelFontSize * renderScale, weight: .light, design: .default))
                     .minimumScaleFactor(0.52)
                     .lineLimit(1)
                     .multilineTextAlignment(.center)
-                    .frame(height: 19 * renderScale)
+                    .frame(height: 22 * renderScale)
                 if let secondary = key.secondary {
                     Text(secondary)
-                        .font(.system(size: 8.5 * renderScale, weight: .medium, design: .rounded))
+                        .font(.system(size: KeyboardMetrics.secondaryLabelFontSize * renderScale, weight: .regular, design: .default))
                         .lineLimit(1)
                         .multilineTextAlignment(.center)
-                        .frame(height: 11 * renderScale)
+                        .frame(height: 13 * renderScale)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        case .numberRow:
+            // Fixed top and bottom anchors keep both baselines identical across
+            // all ten keys, regardless of the symbol's visible glyph height.
+            ZStack {
+                Text(key.primary)
+                    .font(
+                        .system(
+                            size: KeyboardMetrics.numberRowSymbolFontSize * renderScale,
+                            weight: .light,
+                            design: .default
+                        )
+                    )
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .offset(y: 9 * renderScale)
+
+                if let number = key.secondary {
+                    Text(number)
+                        .font(
+                            .system(
+                                size: KeyboardMetrics.numberRowNumberFontSize * renderScale,
+                                weight: .light,
+                                design: .default
+                            )
+                            .monospacedDigit()
+                        )
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                        .offset(y: -7 * renderScale)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        case .symbolPair:
+            VStack(spacing: 2 * renderScale) {
+                Text(key.primary)
+                    .font(.system(size: KeyboardMetrics.symbolPairFontSize * renderScale, weight: .light, design: .default))
+                    .lineLimit(1)
+                    .frame(height: KeyboardMetrics.symbolPairLineHeight * renderScale)
+
+                if let secondary = key.secondary {
+                    Text(secondary)
+                        .font(.system(size: KeyboardMetrics.symbolPairFontSize * renderScale, weight: .light, design: .default))
+                        .lineLimit(1)
+                        .frame(height: KeyboardMetrics.symbolPairLineHeight * renderScale)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
         case .function:
-            VStack(spacing: 3 * renderScale) {
-                symbol(size: 11.5 * renderScale)
-                    .frame(width: 22 * renderScale, height: 16 * renderScale)
-                if let secondary = key.secondary {
-                    Text(secondary)
-                        .font(.system(size: 8 * renderScale, weight: .medium, design: .rounded))
-                        .lineLimit(1)
-                        .frame(height: 10 * renderScale)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            FunctionKeyFace(
+                symbolName: key.symbolName,
+                label: key.secondary
+            )
 
         case .symbol(let corner):
             symbol(size: (isCompact ? 9.5 : (key.isFunction ? 11.5 : 14)) * renderScale)
@@ -589,28 +656,59 @@ private struct KeyFace: View {
                 .padding(keyContentInsets)
             if let secondary = key.secondary {
                 Text(secondary)
-                    .font(.system(size: 8.5 * renderScale, weight: .medium, design: .rounded))
+                    .font(.system(size: KeyboardMetrics.modifierLabelFontSize * renderScale, weight: .regular, design: .default))
+                    .minimumScaleFactor(0.75)
                     .lineLimit(1)
-                    .frame(height: 11 * renderScale)
+                    .frame(height: 15 * renderScale)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: labelCorner.alignment)
                     .padding(keyContentInsets)
             }
 
         case .cornerText(let primaryCorner, let secondaryCorner):
-            Text(key.primary)
-                .font(.system(size: (key.isFunction ? 9.5 : 12) * renderScale, weight: .regular, design: .rounded))
-                .lineLimit(1)
-                .frame(height: (key.isFunction ? 12 : 16) * renderScale)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: primaryCorner.alignment)
-                .padding(keyContentInsets)
-            if let secondary = key.secondary {
-                Text(secondary)
-                    .font(.system(size: 8.5 * renderScale, weight: .medium, design: .rounded))
+            if key.id == "caps" {
+                capsLockFace
+            } else {
+                Text(key.primary)
+                    .font(
+                        .system(
+                            size: cornerPrimaryFontSize * renderScale,
+                            weight: .light,
+                            design: .default
+                        )
+                    )
                     .lineLimit(1)
-                    .frame(height: 11 * renderScale)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: secondaryCorner.alignment)
+                    .frame(height: (key.isFunction ? 15 : 18) * renderScale)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: primaryCorner.alignment)
                     .padding(keyContentInsets)
+                if let secondary = key.secondary {
+                    Text(secondary)
+                        .font(.system(size: cornerSecondaryFontSize * renderScale, weight: .regular, design: .default))
+                        .lineLimit(1)
+                        .frame(height: 13 * renderScale)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: secondaryCorner.alignment)
+                        .padding(keyContentInsets)
+                }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var capsLockFace: some View {
+        Circle()
+            .frame(
+                width: KeyboardMetrics.capsIndicatorDiameter * renderScale,
+                height: KeyboardMetrics.capsIndicatorDiameter * renderScale
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(capsIndicatorInsets)
+
+        if let secondary = key.secondary {
+            Text(secondary)
+                .font(.system(size: cornerSecondaryFontSize * renderScale, weight: .regular, design: .default))
+                .lineLimit(1)
+                .frame(height: 13 * renderScale)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .padding(capsLabelInsets)
         }
     }
 
@@ -632,10 +730,80 @@ private struct KeyFace: View {
         )
     }
 
+    private var capsIndicatorInsets: EdgeInsets {
+        let inset = KeyboardMetrics.capsIndicatorInset * renderScale
+        return EdgeInsets(top: inset, leading: inset, bottom: 0, trailing: 0)
+    }
+
+    private var capsLabelInsets: EdgeInsets {
+        EdgeInsets(
+            top: 0,
+            leading: 9 * renderScale,
+            bottom: KeyboardMetrics.capsLabelBottomInset * renderScale,
+            trailing: 0
+        )
+    }
+
+    private var cornerPrimaryFontSize: CGFloat {
+        return key.isFunction
+            ? KeyboardMetrics.functionCornerLabelFontSize
+            : KeyboardMetrics.cornerLabelFontSize
+    }
+
+    private var cornerSecondaryFontSize: CGFloat {
+        key.id == "caps"
+            ? KeyboardMetrics.secondaryLabelFontSize + 1
+            : KeyboardMetrics.secondaryLabelFontSize
+    }
+
     private var compactCount: String {
         if count >= 10_000 { return "\(count / 1_000)k" }
         if count >= 1_000 { return String(format: "%.1fk", Double(count) / 1_000) }
         return "\(count)"
+    }
+}
+
+private struct FunctionKeyFace: View {
+    let symbolName: String?
+    let label: String?
+
+    @Environment(\.keyboardRenderScale) private var renderScale
+
+    var body: some View {
+        VStack(spacing: KeyboardMetrics.functionContentSpacing * renderScale) {
+            functionSymbol
+                .frame(
+                    width: KeyboardMetrics.functionIconSlotWidth * renderScale,
+                    height: KeyboardMetrics.functionIconSlotHeight * renderScale
+                )
+
+            if let label {
+                Text(label)
+                    .font(
+                        .system(
+                            size: KeyboardMetrics.functionLabelFontSize * renderScale,
+                            weight: .regular,
+                            design: .monospaced
+                        )
+                    )
+                    .lineLimit(1)
+                    .frame(
+                        width: KeyboardMetrics.functionLabelFontSize * 3 * renderScale,
+                        height: KeyboardMetrics.functionLabelLineHeight * renderScale,
+                        alignment: .center
+                    )
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+
+    @ViewBuilder
+    private var functionSymbol: some View {
+        if let symbolName {
+            Image(systemName: symbolName)
+                .font(.system(size: 11.5 * renderScale, weight: .regular))
+                .symbolRenderingMode(.monochrome)
+        }
     }
 }
 
@@ -776,6 +944,8 @@ private struct KeyboardKey: Identifiable {
 
 private enum KeyFaceStyle {
     case centered
+    case numberRow
+    case symbolPair
     case function
     case symbol(KeyCorner)
     case modifier(icon: KeyCorner, label: KeyCorner)
@@ -819,58 +989,69 @@ private enum KeyboardLayout {
             .init("f2", code: 120, secondary: "F2", symbol: "sun.max", face: .function, function: true),
             .init("f3", code: 99, secondary: "F3", symbol: "rectangle.grid.2x2", face: .function, function: true),
             .init("f4", code: 118, secondary: "F4", symbol: "magnifyingglass", face: .function, function: true),
-            .init("f5", code: 96, secondary: "F5", symbol: "mic.fill", face: .function, function: true),
+            .init("f5", code: 96, secondary: "F5", symbol: "mic", face: .function, function: true),
             .init("f6", code: 97, secondary: "F6", symbol: "moon", face: .function, function: true),
-            .init("f7", code: 98, secondary: "F7", symbol: "backward.fill", face: .function, function: true),
-            .init("f8", code: 100, secondary: "F8", symbol: "playpause.fill", face: .function, function: true),
-            .init("f9", code: 101, secondary: "F9", symbol: "forward.fill", face: .function, function: true),
-            .init("f10", code: 109, secondary: "F10", symbol: "speaker.slash.fill", face: .function, function: true),
-            .init("f11", code: 103, secondary: "F11", symbol: "speaker.wave.1.fill", face: .function, function: true),
-            .init("f12", code: 111, secondary: "F12", symbol: "speaker.wave.3.fill", face: .function, function: true),
-            .init("lock", code: displayOnlyLockKeyCode, symbol: "lock.fill", face: .symbol(.center), width: 1.02, function: true, exteriorCorner: .topTrailing)
+            .init("f7", code: 98, secondary: "F7", symbol: "backward", face: .function, function: true),
+            .init("f8", code: 100, secondary: "F8", symbol: "playpause", face: .function, function: true),
+            .init("f9", code: 101, secondary: "F9", symbol: "forward", face: .function, function: true),
+            .init("f10", code: 109, secondary: "F10", symbol: "speaker.slash", face: .function, function: true),
+            .init("f11", code: 103, secondary: "F11", symbol: "speaker.wave.1", face: .function, function: true),
+            .init("f12", code: 111, secondary: "F12", symbol: "speaker.wave.3", face: .function, function: true),
+            .init("lock", code: displayOnlyLockKeyCode, symbol: "eject", face: .symbol(.center), width: 1.02, function: true, exteriorCorner: .topTrailing)
         ],
         [
-            .init("grave", code: 50, "~", secondary: "`"),
-            .init("1", code: 18, "!", secondary: "1"), .init("2", code: 19, "@", secondary: "2"),
-            .init("3", code: 20, "#", secondary: "3"), .init("4", code: 21, "¥", secondary: "4"),
-            .init("5", code: 23, "%", secondary: "5"), .init("6", code: 22, "^", secondary: "6"),
-            .init("7", code: 26, "&", secondary: "7"), .init("8", code: 28, "*", secondary: "8"),
-            .init("9", code: 25, "(", secondary: "9"), .init("0", code: 29, ")", secondary: "0"),
-            .init("minus", code: 27, "−", secondary: "_"), .init("equal", code: 24, "+", secondary: "="),
-            .init("delete", code: 51, symbol: "delete.left", face: .symbol(.trailing), width: 1.55)
+            .init("grave", code: 50, "~", secondary: "`", face: .symbolPair),
+            .init("1", code: 18, "!", secondary: "1", face: .numberRow),
+            .init("2", code: 19, "@", secondary: "2", face: .numberRow),
+            .init("3", code: 20, "#", secondary: "3", face: .numberRow),
+            .init("4", code: 21, "¥", secondary: "4", face: .numberRow),
+            .init("5", code: 23, "%", secondary: "5", face: .numberRow),
+            .init("6", code: 22, "^", secondary: "6", face: .numberRow),
+            .init("7", code: 26, "&", secondary: "7", face: .numberRow),
+            .init("8", code: 28, "*", secondary: "8", face: .numberRow),
+            .init("9", code: 25, "(", secondary: "9", face: .numberRow),
+            .init("0", code: 29, ")", secondary: "0", face: .numberRow),
+            .init("minus", code: 27, "—", secondary: "-", face: .symbolPair),
+            .init("equal", code: 24, "+", secondary: "=", face: .symbolPair),
+            .init("delete", code: 51, symbol: "delete.left", face: .symbol(.bottomTrailing), width: 1.55)
         ],
         [
-            .init("tab", code: 48, symbol: "arrow.right.to.line.compact", face: .symbol(.leading), width: 1.55),
+            .init("tab", code: 48, symbol: "arrow.right.to.line.compact", face: .symbol(.bottomLeading), width: 1.55),
             .init("q", code: 12, "Q"), .init("w", code: 13, "W"), .init("e", code: 14, "E"),
             .init("r", code: 15, "R"), .init("t", code: 17, "T"), .init("y", code: 16, "Y"),
             .init("u", code: 32, "U"), .init("i", code: 34, "I"), .init("o", code: 31, "O"),
-            .init("p", code: 35, "P"), .init("leftBracket", code: 33, "{", secondary: "["),
-            .init("rightBracket", code: 30, "}", secondary: "]"), .init("backslash", code: 42, "|", secondary: "\\", width: 1.05)
+            .init("p", code: 35, "P"),
+            .init("leftBracket", code: 33, "{", secondary: "[", face: .symbolPair),
+            .init("rightBracket", code: 30, "}", secondary: "]", face: .symbolPair),
+            .init("backslash", code: 42, "|", secondary: "\\", face: .symbolPair, width: 1.05)
         ],
         [
             .init("caps", code: 57, "•", secondary: "中/英", face: .cornerText(primary: .topLeading, secondary: .bottomLeading), width: 1.8),
             .init("a", code: 0, "A"), .init("s", code: 1, "S"), .init("d", code: 2, "D"),
             .init("f", code: 3, "F"), .init("g", code: 5, "G"), .init("h", code: 4, "H"),
             .init("j", code: 38, "J"), .init("k", code: 40, "K"), .init("l", code: 37, "L"),
-            .init("semicolon", code: 41, ":", secondary: ";"), .init("quote", code: 39, "\"", secondary: "'"),
+            .init("semicolon", code: 41, ":", secondary: ";", face: .symbolPair),
+            .init("quote", code: 39, "\"", secondary: "'", face: .symbolPair),
             .init("return", code: 36, symbol: "return", face: .symbol(.bottomTrailing), width: 2.04)
         ],
         [
             .init("leftShift", code: 56, symbol: "shift", face: .symbol(.bottomLeading), width: 2.35),
             .init("z", code: 6, "Z"), .init("x", code: 7, "X"), .init("c", code: 8, "C"),
             .init("v", code: 9, "V"), .init("b", code: 11, "B"), .init("n", code: 45, "N"),
-            .init("m", code: 46, "M"), .init("comma", code: 43, "<", secondary: ","),
-            .init("period", code: 47, ">", secondary: "."), .init("slash", code: 44, "?", secondary: "/"),
+            .init("m", code: 46, "M"),
+            .init("comma", code: 43, "<", secondary: ",", face: .symbolPair),
+            .init("period", code: 47, ">", secondary: ".", face: .symbolPair),
+            .init("slash", code: 44, "?", secondary: "/", face: .symbolPair),
             .init("rightShift", code: 60, symbol: "shift", face: .symbol(.bottomTrailing), width: 2.25)
         ],
         [
             .init("globe", code: 63, symbol: "globe", face: .symbol(.bottomLeading), exteriorCorner: .bottomLeading),
-            .init("leftControl", code: 59, secondary: "control", symbol: "control", face: .modifier(icon: .topLeading, label: .bottomLeading), width: 1.18),
-            .init("leftOption", code: 58, secondary: "option", symbol: "option", face: .modifier(icon: .topLeading, label: .bottomLeading), width: 1.18),
-            .init("leftCommand", code: 55, secondary: "command", symbol: "command", face: .modifier(icon: .topTrailing, label: .bottomLeading), countCorner: .topLeading, width: 1.35),
-            .init("space", code: 49, "", width: 5.45),
-            .init("rightCommand", code: 54, secondary: "command", symbol: "command", face: .modifier(icon: .topLeading, label: .bottomLeading), width: 1.35),
-            .init("rightOption", code: 61, secondary: "option", symbol: "option", face: .modifier(icon: .topTrailing, label: .bottomLeading), width: 1.18),
+            .init("leftControl", code: 59, secondary: "control", symbol: "control", face: .modifier(icon: .topLeading, label: .bottomLeading), width: KeyboardMetrics.bottomModifierKeyWidth),
+            .init("leftOption", code: 58, secondary: "option", symbol: "option", face: .modifier(icon: .topLeading, label: .bottomLeading), width: KeyboardMetrics.bottomModifierKeyWidth),
+            .init("leftCommand", code: 55, secondary: "command", symbol: "command", face: .modifier(icon: .topLeading, label: .bottomLeading), countCorner: .topTrailing, width: 1.35),
+            .init("space", code: 49, "", width: KeyboardMetrics.spaceKeyWidth),
+            .init("rightCommand", code: 54, secondary: "command", symbol: "command", face: .modifier(icon: .topTrailing, label: .bottomTrailing), countCorner: .topLeading, width: 1.35),
+            .init("rightOption", code: 61, secondary: "option", symbol: "option", face: .modifier(icon: .topTrailing, label: .bottomTrailing), countCorner: .topLeading, width: KeyboardMetrics.bottomModifierKeyWidth),
             .init("left", code: 123, symbol: "arrowtriangle.left.fill", face: .symbol(.center)),
             .init("upDown", code: 126, symbol: "arrowtriangle.up.fill", face: .symbol(.center), pairedCode: 125),
             .init("right", code: 124, symbol: "arrowtriangle.right.fill", face: .symbol(.center), exteriorCorner: .bottomTrailing)
