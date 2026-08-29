@@ -24,6 +24,7 @@ struct PlaybackVideoFrame: View {
                 activeKeyDescription: activeRecord?.key,
                 activeKeyCodes: activeRecord.map { Set([$0.keyCode]) } ?? [],
                 displayMode: .playback,
+                layoutMode: .qwerty,
                 isPlaying: activeRecord != nil,
                 keyCounts: [:],
                 alignsToTop: false,

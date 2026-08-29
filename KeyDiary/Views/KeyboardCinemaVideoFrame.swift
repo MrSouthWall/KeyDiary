@@ -28,6 +28,7 @@ struct KeyboardCinemaVideoFrame: View {
                 activeKeyDescription: nil,
                 activeKeyCodes: [],
                 displayMode: .cinema,
+                layoutMode: .qwerty,
                 isPlaying: true,
                 keyCounts: [:],
                 alignsToTop: false,

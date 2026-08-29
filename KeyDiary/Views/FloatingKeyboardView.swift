@@ -27,6 +27,7 @@ struct FloatingKeyboardView: View {
                 activeKeyDescription: store.activeLiveKeySummary,
                 activeKeyCodes: store.activeLiveKeyCodes,
                 displayMode: .live,
+                layoutMode: .qwerty,
                 isPlaying: false,
                 keyCounts: [:],
                 alignsToTop: false,

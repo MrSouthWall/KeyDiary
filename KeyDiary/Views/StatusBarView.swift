@@ -9,6 +9,7 @@ struct KeyDiaryStatusBar: View {
     @Bindable var store: KeyDiaryStore
     @Bindable var videoPlayer: KeyboardVideoPlayer
     @Binding var selection: KeyboardDisplayMode
+    @Binding var keyboardLayout: KeyboardLayoutMode
     @AppStorage(KeySoundPreferences.isEnabledStorageKey) private var isKeySoundEnabled = false
     @State private var isVideoFormatPresented = false
 
@@ -54,6 +55,11 @@ struct KeyDiaryStatusBar: View {
                 barDivider
                 ApplicationMenu(store: store, tint: optionTint)
                     .disabled(store.isPlaybackVideoExportInProgress)
+
+                if selection == .statistics {
+                    barDivider
+                    KeyboardLayoutPicker(selection: $keyboardLayout, tint: optionTint)
+                }
 
                 if selection == .playback {
                     barDivider
@@ -416,6 +422,46 @@ struct KeyDiaryStatusBar: View {
             .fill(.separator.opacity(0.65))
             .frame(width: 1, height: 22)
             .padding(.horizontal, 2)
+    }
+}
+
+private struct KeyboardLayoutPicker: View {
+    @Binding var selection: KeyboardLayoutMode
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(KeyboardLayoutMode.allCases) { layout in
+                layoutButton(layout)
+            }
+        }
+        .padding(3)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("统计键盘排列")
+        .help("切换键帽排列，对比高频字母是否集中")
+    }
+
+    private func layoutButton(_ layout: KeyboardLayoutMode) -> some View {
+        let isSelected = selection == layout
+
+        return Button {
+            selection = layout
+        } label: {
+            Text(layout.title)
+                .font(.system(size: 12, weight: isSelected ? .semibold : .medium, design: .rounded))
+                .foregroundStyle(isSelected ? tint : Color.secondary)
+                .frame(minWidth: 48, minHeight: 28)
+                .background {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(isSelected ? tint.opacity(0.12) : .clear)
+                        .shadow(color: .black.opacity(isSelected ? 0.08 : 0), radius: 2, y: 1)
+                }
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(layout.accessibilityTitle)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

@@ -145,10 +145,15 @@ private func keyboardKeycapForeground(
         : Color.white.opacity(0.78)
 }
 
+private func keyboardHeatOverlayOpacity(_ heat: Double) -> Double {
+    0.14 + heat * 0.48
+}
+
 struct KeyboardStage: View {
     let activeKeyDescription: String?
     let activeKeyCodes: Set<UInt16>
     let displayMode: KeyboardDisplayMode
+    let layoutMode: KeyboardLayoutMode
     let isPlaying: Bool
     let keyCounts: [UInt16: Int]
     let alignsToTop: Bool
@@ -170,6 +175,7 @@ struct KeyboardStage: View {
                 activeKeyCodes: activeKeyCodes,
                 keyCounts: keyCounts,
                 maximumCount: maximumCount,
+                layoutMode: layoutMode,
                 pixelFrame: pixelFrame
             )
             .environment(\.keyboardRenderScale, scale)
@@ -210,7 +216,7 @@ struct KeyboardStage: View {
         case .live:
             activeKeyDescription.map { "当前按键 \($0)" } ?? "等待按键"
         case .statistics:
-            "峰值 \(maximumCount) 次"
+            "\(layoutMode.accessibilityTitle)，峰值 \(maximumCount) 次"
         case .playback:
             isPlaying ? "正在回放 \(activeKeyDescription ?? "")" : "回放已停止"
         case .cinema:
@@ -223,6 +229,7 @@ private struct KeyboardModel: View {
     let activeKeyCodes: Set<UInt16>
     let keyCounts: [UInt16: Int]
     let maximumCount: Int
+    let layoutMode: KeyboardLayoutMode
     let pixelFrame: KeyboardPixelFrame?
     @Environment(\.keyboardRenderScale) private var renderScale
 
@@ -232,6 +239,7 @@ private struct KeyboardModel: View {
                 activeKeyCodes: activeKeyCodes,
                 keyCounts: keyCounts,
                 maximumCount: maximumCount,
+                layoutMode: layoutMode,
                 pixelFrame: pixelFrame
             )
             .frame(height: KeyboardMetrics.deckHeight * renderScale)
@@ -249,6 +257,7 @@ private struct KeyboardDeck: View {
     let activeKeyCodes: Set<UInt16>
     let keyCounts: [UInt16: Int]
     let maximumCount: Int
+    let layoutMode: KeyboardLayoutMode
     let pixelFrame: KeyboardPixelFrame?
     @Environment(\.keyboardRenderScale) private var renderScale
     @Environment(\.colorScheme) private var colorScheme
@@ -279,7 +288,7 @@ private struct KeyboardDeck: View {
                 )
 
             VStack(spacing: KeyboardMetrics.rowSpacing * renderScale) {
-                ForEach(Array(KeyboardLayout.rows.enumerated()), id: \.offset) { rowIndex, row in
+                ForEach(Array(KeyboardLayout.rows(for: layoutMode).enumerated()), id: \.offset) { rowIndex, row in
                     KeyboardRowView(
                         keys: row,
                         height: KeyboardMetrics.keyHeight * renderScale,
@@ -464,7 +473,7 @@ private struct ArrowKeyHalfStyle: ButtonStyle {
                         .overlay {
                             if pixelColor == nil, !pressed, heat > 0 {
                                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                                    .fill(themeColor.opacity(0.1 + heat * 0.34))
+                                    .fill(themeColor.opacity(keyboardHeatOverlayOpacity(heat)))
                             }
                         }
                         .overlay {
@@ -849,7 +858,7 @@ private struct ThreeDimensionalKeyStyle: ButtonStyle {
                         .overlay {
                             if pixelColor == nil, !pressed, heat > 0 {
                                 UnevenRoundedRectangle(cornerRadii: cornerRadii, style: .continuous)
-                                    .fill(themeColor.opacity(0.1 + heat * 0.34))
+                                    .fill(themeColor.opacity(keyboardHeatOverlayOpacity(heat)))
                             }
                         }
                         .overlay {
@@ -940,6 +949,10 @@ private struct KeyboardKey: Identifiable {
         if let secondary { return secondary }
         return primary.isEmpty ? id : primary
     }
+
+    var isLetter: Bool {
+        primary.count == 1 && primary.first?.isLetter == true
+    }
 }
 
 private enum KeyFaceStyle {
@@ -982,7 +995,7 @@ private enum KeyboardLayout {
     // Visual-only sentinel. No recorder maps an event to this key code.
     private static let displayOnlyLockKeyCode = UInt16.max
 
-    static let rows: [[KeyboardKey]] = [
+    private static let qwertyRows: [[KeyboardKey]] = [
         [
             .init("esc", code: 53, "esc", face: .cornerText(primary: .bottomLeading, secondary: .bottomLeading), width: 1.55, function: true, exteriorCorner: .topLeading),
             .init("f1", code: 122, secondary: "F1", symbol: "sun.min", face: .function, function: true),
@@ -1057,4 +1070,23 @@ private enum KeyboardLayout {
             .init("right", code: 124, symbol: "arrowtriangle.right.fill", face: .symbol(.center), exteriorCorner: .bottomTrailing)
         ]
     ]
+
+    static func rows(for mode: KeyboardLayoutMode) -> [[KeyboardKey]] {
+        guard mode != .qwerty else { return qwertyRows }
+
+        let letterKeys = Dictionary(
+            uniqueKeysWithValues: qwertyRows
+                .flatMap { $0 }
+                .filter(\.isLetter)
+                .map { ($0.primary.first!, $0) }
+        )
+        var orderedLetters = mode.letterRows.flatMap { $0 }.makeIterator()
+
+        return qwertyRows.map { row in
+            row.map { key in
+                guard key.isLetter, let letter = orderedLetters.next() else { return key }
+                return letterKeys[letter] ?? key
+            }
+        }
+    }
 }

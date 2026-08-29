@@ -19,6 +19,7 @@ struct ContentView: View {
     @State private var displayMode: KeyboardDisplayMode = .live
     @State private var isShowingCustomRange = false
     @State private var lastLiveKeySummary: String?
+    @AppStorage("statisticsKeyboardLayout") private var statisticsKeyboardLayout: KeyboardLayoutMode = .qwerty
 
     var body: some View {
         ZStack {
@@ -28,6 +29,7 @@ struct ContentView: View {
                 activeKeyDescription: activeKeyDescription,
                 activeKeyCodes: activeKeyCodes,
                 displayMode: displayMode,
+                layoutMode: displayMode == .statistics ? statisticsKeyboardLayout : .qwerty,
                 isPlaying: stageIsPlaying,
                 keyCounts: displayMode == .statistics ? store.filteredKeyCounts : [:],
                 alignsToTop: false,
@@ -48,6 +50,7 @@ struct ContentView: View {
                     store: store,
                     videoPlayer: videoPlayer,
                     selection: $displayMode,
+                    keyboardLayout: $statisticsKeyboardLayout,
                     showCustomRange: { isShowingCustomRange = true },
                     openFloatingKeyboard: openFloatingKeyboard,
                     openVideoPreview: openVideoPreview
@@ -181,7 +184,7 @@ struct ContentView: View {
             return "最近按键 · \(lastLiveKeySummary ?? "等待输入")"
         case .statistics:
             if store.filteredRecordCount == 0 { return "请调整时间或 App 筛选" }
-            return "当前筛选 · \(store.filteredRecordCount.formatted()) 次按键"
+            return "当前筛选 · \(store.filteredRecordCount.formatted()) 次按键 · \(statisticsKeyboardLayout.accessibilityTitle)"
         case .playback:
             if store.isPlaying { return "当前按键 · \(store.activePlaybackKey ?? "准备中")" }
             if store.playbackRecordCount == 0 { return "请调整时间轴的起止位置" }
