@@ -116,11 +116,14 @@ KeyDiary/
 │   └── Views/                 # 主界面、设置、时间轴与悬浮窗口
 ├── KeyDiaryTests/             # 数据库、Store、布局与像素帧测试
 ├── script/build_and_run.sh    # 本地构建、运行与调试脚本
+├── LICENSE                    # MIT 开源许可证
 └── THIRD_PARTY_NOTICES.md     # 第三方资源声明
 ```
 
-## 第三方资源与许可
+## 开源许可
+
+Key Diary 基于 [MIT License](LICENSE) 开源。你可以自由使用、复制、修改、合并、发布和分发本项目，但须保留原始版权与许可声明。
+
+## 第三方资源
 
 机械键盘音效来自 [tplai/kbsim](https://github.com/tplai/kbsim)，详细许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。依赖版本锁定在 Swift Package Manager 的 `Package.resolved` 中。
-
-仓库目前未包含项目自身的开源许可证；在明确授权条款前，默认保留所有权利。
