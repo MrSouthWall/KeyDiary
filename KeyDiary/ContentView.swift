@@ -164,33 +164,45 @@ struct ContentView: View {
     private var modeStatusTitle: String {
         switch displayMode {
         case .live:
-            if !store.hasInputMonitoringPermission { return "等待输入监控授权" }
-            return store.isRecording ? "正在实时记录" : "实时记录已暂停"
+            if !store.hasInputMonitoringPermission { return L10n.text("等待输入监控授权") }
+            return store.isRecording ? L10n.text("正在实时记录") : L10n.text("实时记录已暂停")
         case .statistics:
-            return store.filteredRecordCount == 0 ? "暂无统计数据" : "统计已更新"
+            return store.filteredRecordCount == 0 ? L10n.text("暂无统计数据") : L10n.text("统计已更新")
         case .playback:
-            if store.isPlaying { return "正在回放" }
-            return store.playbackRecordCount == 0 ? "所选区间没有可回放记录" : "回放已就绪"
+            if store.isPlaying { return L10n.text("正在回放") }
+            return store.playbackRecordCount == 0
+                ? L10n.text("所选区间没有可回放记录")
+                : L10n.text("回放已就绪")
         case .cinema:
-            return videoPlayer.isPlaying ? "键帽像素正在播放" : "键帽像素已暂停"
+            return videoPlayer.isPlaying ? L10n.text("键帽像素正在播放") : L10n.text("键帽像素已暂停")
         }
     }
 
     private var modeStatusDetail: String {
         switch displayMode {
         case .live:
-            if !store.hasInputMonitoringPermission { return "请在设置中完成授权" }
-            if !store.isRecording { return "可在设置中继续记录" }
-            return "最近按键 · \(lastLiveKeySummary ?? "等待输入")"
+            if !store.hasInputMonitoringPermission { return L10n.text("请在设置中完成授权") }
+            if !store.isRecording { return L10n.text("可在设置中继续记录") }
+            return L10n.format("最近按键 · %@", lastLiveKeySummary ?? L10n.text("等待输入"))
         case .statistics:
-            if store.filteredRecordCount == 0 { return "请调整时间或 App 筛选" }
-            return "当前筛选 · \(store.filteredRecordCount.formatted()) 次按键 · \(statisticsKeyboardLayout.accessibilityTitle)"
+            if store.filteredRecordCount == 0 { return L10n.text("请调整时间或 App 筛选") }
+            return L10n.format(
+                "当前筛选 · %@ 次按键 · %@",
+                store.filteredRecordCount.formatted(),
+                statisticsKeyboardLayout.accessibilityTitle
+            )
         case .playback:
-            if store.isPlaying { return "当前按键 · \(store.activePlaybackKey ?? "准备中")" }
-            if store.playbackRecordCount == 0 { return "请调整时间轴的起止位置" }
-            return "所选 \(store.playbackRecordCount.formatted()) 条记录 · 预计 \(store.estimatedPlaybackDurationTitle)"
+            if store.isPlaying {
+                return L10n.format("当前按键 · %@", store.activePlaybackKey ?? L10n.text("准备中"))
+            }
+            if store.playbackRecordCount == 0 { return L10n.text("请调整时间轴的起止位置") }
+            return L10n.format(
+                "所选 %@ 条记录 · 预计 %@",
+                store.playbackRecordCount.formatted(),
+                store.estimatedPlaybackDurationTitle
+            )
         case .cinema:
-            return videoPlayer.videoTitle ?? "选择一个视频"
+            return videoPlayer.videoTitle ?? L10n.text("选择一个视频")
         }
     }
 

@@ -51,7 +51,7 @@ final class KeyboardCinemaVideoExporter {
         }
         let loadedDuration = try await asset.load(.duration).seconds
         guard loadedDuration.isFinite, loadedDuration > 0 else {
-            throw PlaybackVideoExportError.cannotReadSource("视频时长无效。")
+            throw PlaybackVideoExportError.cannotReadSource(L10n.text("视频时长无效。"))
         }
         let duration = min(loadedDuration, maximumDuration ?? loadedDuration)
         let hasAudio = try await !asset.loadTracks(withMediaType: .audio).isEmpty
@@ -94,12 +94,12 @@ final class KeyboardCinemaVideoExporter {
         )
         readerOutput.alwaysCopiesSampleData = false
         guard reader.canAdd(readerOutput) else {
-            throw PlaybackVideoExportError.cannotReadSource("无法创建视频帧解码器。")
+            throw PlaybackVideoExportError.cannotReadSource(L10n.text("无法创建视频帧解码器。"))
         }
         reader.add(readerOutput)
         guard reader.startReading() else {
             throw PlaybackVideoExportError.cannotReadSource(
-                reader.error?.localizedDescription ?? "视频帧解码器无法启动。"
+                reader.error?.localizedDescription ?? L10n.text("视频帧解码器无法启动。")
             )
         }
         defer { reader.cancelReading() }
@@ -126,7 +126,7 @@ final class KeyboardCinemaVideoExporter {
                 guard let sample = heldSample ?? nextSample,
                       let pixelBuffer = CMSampleBufferGetImageBuffer(sample) else {
                     throw PlaybackVideoExportError.cannotReadSource(
-                        reader.error?.localizedDescription ?? "视频中没有可解码的画面。"
+                        reader.error?.localizedDescription ?? L10n.text("视频中没有可解码的画面。")
                     )
                 }
                 let keyboardFrame = KeyboardPixelFrame(
@@ -222,7 +222,7 @@ final class KeyboardCinemaVideoExporter {
             let sourceAsset = AVURLAsset(url: sourceURL)
             guard let sourceVideoTrack = try await videoAsset.loadTracks(withMediaType: .video).first,
                   let sourceAudioTrack = try await sourceAsset.loadTracks(withMediaType: .audio).first else {
-                throw PlaybackVideoExportError.cannotMuxAudio("临时视频或原片音轨不可用。")
+                throw PlaybackVideoExportError.cannotMuxAudio(L10n.text("临时视频或原片音轨不可用。"))
             }
 
             let composition = AVMutableComposition()
@@ -233,7 +233,7 @@ final class KeyboardCinemaVideoExporter {
                 withMediaType: .audio,
                 preferredTrackID: kCMPersistentTrackID_Invalid
             ) else {
-                throw PlaybackVideoExportError.cannotMuxAudio("无法创建音视频合成轨道。")
+                throw PlaybackVideoExportError.cannotMuxAudio(L10n.text("无法创建音视频合成轨道。"))
             }
 
             let videoDuration = try await videoAsset.load(.duration)
@@ -262,7 +262,7 @@ final class KeyboardCinemaVideoExporter {
                 asset: composition,
                 presetName: AVAssetExportPresetPassthrough
             ) else {
-                throw PlaybackVideoExportError.cannotMuxAudio("无法创建音视频合成器。")
+                throw PlaybackVideoExportError.cannotMuxAudio(L10n.text("无法创建音视频合成器。"))
             }
             try await exportSession.export(to: outputURL, as: settings.container.fileType)
         } catch let error as PlaybackVideoExportError {

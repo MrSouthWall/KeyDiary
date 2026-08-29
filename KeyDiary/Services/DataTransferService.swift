@@ -52,13 +52,13 @@ nonisolated enum DataTransferError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unsupportedFormat:
-            "不支持这种文件格式。请选择 JSON、CSV 或 XLSX 文件。"
+            L10n.text("不支持这种文件格式。请选择 JSON、CSV 或 XLSX 文件。")
         case .invalidFile(let detail):
-            "无法导入数据：\(detail)"
+            L10n.format("无法导入数据：%@", detail)
         case .unableToCreateFile:
-            "无法创建导出文件。"
+            L10n.text("无法创建导出文件。")
         case .unableToCreateWorkbook:
-            "无法创建或读取 Excel 工作簿。"
+            L10n.text("无法创建或读取 Excel 工作簿。")
         }
     }
 }
@@ -282,7 +282,7 @@ nonisolated final class DataTransferService: @unchecked Sendable {
         let decoder = JSONDecoder()
         if let envelope = try? decoder.decode(TransferEnvelope.self, from: data) {
             guard envelope.formatVersion == 1 else {
-                throw DataTransferError.invalidFile("JSON 格式版本不受支持。")
+                throw DataTransferError.invalidFile(L10n.text("JSON 格式版本不受支持。"))
             }
             for record in envelope.records {
                 try receive(try keyPressRecord(from: record))
@@ -298,7 +298,7 @@ nonisolated final class DataTransferService: @unchecked Sendable {
                 try receive(record)
             }
         } catch {
-            throw DataTransferError.invalidFile("JSON 结构或字段不正确。")
+            throw DataTransferError.invalidFile(L10n.text("JSON 结构或字段不正确。"))
         }
     }
 
@@ -320,11 +320,13 @@ nonisolated final class DataTransferService: @unchecked Sendable {
                     headerMap: headerMap!
                 ))
             } catch {
-                throw DataTransferError.invalidFile("CSV 第 \(rowNumber) 行无效：\(error.localizedDescription)")
+                throw DataTransferError.invalidFile(
+                    L10n.format("CSV 第 %lld 行无效：%@", Int64(rowNumber), error.localizedDescription)
+                )
             }
         }
         guard headerMap != nil else {
-            throw DataTransferError.invalidFile("CSV 文件没有表头。")
+            throw DataTransferError.invalidFile(L10n.text("CSV 文件没有表头。"))
         }
     }
 
@@ -357,7 +359,7 @@ nonisolated final class DataTransferService: @unchecked Sendable {
             .filter { $0.path.hasPrefix("xl/worksheets/") && $0.path.hasSuffix(".xml") }
             .sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
         guard !worksheetEntries.isEmpty else {
-            throw DataTransferError.invalidFile("Excel 文件没有工作表。")
+            throw DataTransferError.invalidFile(L10n.text("Excel 文件没有工作表。"))
         }
 
         var importedSheet = false
@@ -375,14 +377,14 @@ nonisolated final class DataTransferService: @unchecked Sendable {
             do {
                 try parser.parse(url: sheetURL)
                 importedSheet = true
-            } catch DataTransferError.invalidFile(let detail) where detail.contains("缺少字段") {
+            } catch DataTransferError.invalidFile(let detail) where detail.contains(L10n.text("缺少字段")) {
                 // Metadata or unrelated sheets are ignored. At least one records sheet is required.
                 continue
             }
         }
 
         guard importedSheet else {
-            throw DataTransferError.invalidFile("Excel 工作表中没有 KeyDiary 记录。")
+            throw DataTransferError.invalidFile(L10n.text("Excel 工作表中没有键盘日记记录。"))
         }
     }
 
@@ -399,10 +401,10 @@ nonisolated final class DataTransferService: @unchecked Sendable {
 
     private func keyPressRecord(from record: TransferRecord) throws -> KeyPressRecord {
         guard let id = UUID(uuidString: record.id) else {
-            throw DataTransferError.invalidFile("记录 ID 不是有效 UUID。")
+            throw DataTransferError.invalidFile(L10n.text("记录 ID 不是有效 UUID。"))
         }
         guard let timestamp = parseTimestamp(record.timestamp) else {
-            throw DataTransferError.invalidFile("记录时间不是有效 ISO 8601 时间。")
+            throw DataTransferError.invalidFile(L10n.text("记录时间不是有效 ISO 8601 时间。"))
         }
         return KeyPressRecord(
             id: id,
@@ -458,14 +460,14 @@ nonisolated final class DataTransferService: @unchecked Sendable {
         }
 
         guard let id = UUID(uuidString: value("id")) else {
-            throw DataTransferError.invalidFile("ID 不是有效 UUID。")
+            throw DataTransferError.invalidFile(L10n.text("ID 不是有效 UUID。"))
         }
         guard let timestamp = parseTimestamp(value("timestamp")) else {
-            throw DataTransferError.invalidFile("时间不是有效 ISO 8601 时间。")
+            throw DataTransferError.invalidFile(L10n.text("时间不是有效 ISO 8601 时间。"))
         }
         guard let numericKeyCode = Int(value("keycode")),
               let keyCode = UInt16(exactly: numericKeyCode) else {
-            throw DataTransferError.invalidFile("keyCode 超出范围。")
+            throw DataTransferError.invalidFile(L10n.text("keyCode 超出范围。"))
         }
 
         return KeyPressRecord(
@@ -490,7 +492,9 @@ nonisolated final class DataTransferService: @unchecked Sendable {
         let required = ["id", "timestamp", "keycode", "key", "applicationname"]
         let missing = required.filter { map[$0] == nil }
         guard missing.isEmpty else {
-            throw DataTransferError.invalidFile("缺少字段：\(missing.joined(separator: ", "))。")
+            throw DataTransferError.invalidFile(
+                L10n.format("缺少字段：%@。", missing.joined(separator: ", "))
+            )
         }
         return map
     }
@@ -683,7 +687,7 @@ private nonisolated final class CSVRowStream {
 
     init(url: URL) throws {
         guard let inputStream = InputStream(url: url) else {
-            throw DataTransferError.invalidFile("无法读取 CSV 文件。")
+            throw DataTransferError.invalidFile(L10n.text("无法读取 CSV 文件。"))
         }
         self.inputStream = inputStream
     }
@@ -701,7 +705,7 @@ private nonisolated final class CSVRowStream {
 
         func finishField() throws {
             guard let string = String(bytes: field, encoding: .utf8) else {
-                throw DataTransferError.invalidFile("CSV 不是有效的 UTF-8 文件。")
+                throw DataTransferError.invalidFile(L10n.text("CSV 不是有效的 UTF-8 文件。"))
             }
             row.append(string)
             field.removeAll(keepingCapacity: true)
@@ -715,7 +719,9 @@ private nonisolated final class CSVRowStream {
 
         while inputStream.hasBytesAvailable {
             let readCount = inputStream.read(&buffer, maxLength: buffer.count)
-            if readCount < 0 { throw inputStream.streamError ?? DataTransferError.invalidFile("CSV 读取失败。") }
+            if readCount < 0 {
+                throw inputStream.streamError ?? DataTransferError.invalidFile(L10n.text("CSV 读取失败。"))
+            }
             if readCount == 0 { break }
 
             for byte in buffer.prefix(readCount) {
@@ -740,7 +746,7 @@ private nonisolated final class CSVRowStream {
                                 try finishRow()
                                 pendingCarriageReturn = true
                             } else if byte != 0x20 && byte != 0x09 {
-                                throw DataTransferError.invalidFile("CSV 引号后的字符无效。")
+                                throw DataTransferError.invalidFile(L10n.text("CSV 引号后的字符无效。"))
                             }
                         }
                     } else if byte == 0x22 {
@@ -768,7 +774,7 @@ private nonisolated final class CSVRowStream {
         }
 
         guard !insideQuotes || quotePending else {
-            throw DataTransferError.invalidFile("CSV 中有未闭合的引号。")
+            throw DataTransferError.invalidFile(L10n.text("CSV 中有未闭合的引号。"))
         }
         if !field.isEmpty || !row.isEmpty {
             try finishRow()
@@ -784,11 +790,11 @@ private nonisolated final class SharedStringsParser: NSObject, XMLParserDelegate
 
     func parse(url: URL) throws -> [String] {
         guard let parser = XMLParser(contentsOf: url) else {
-            throw DataTransferError.invalidFile("无法读取 Excel 共享文本。")
+            throw DataTransferError.invalidFile(L10n.text("无法读取 Excel 共享文本。"))
         }
         parser.delegate = self
         guard parser.parse() else {
-            throw parser.parserError ?? DataTransferError.invalidFile("Excel 共享文本无效。")
+            throw parser.parserError ?? DataTransferError.invalidFile(L10n.text("Excel 共享文本无效。"))
         }
         return strings
     }
@@ -856,16 +862,16 @@ private nonisolated final class WorksheetRecordParser: NSObject, XMLParserDelega
 
     func parse(url: URL) throws {
         guard let parser = XMLParser(contentsOf: url) else {
-            throw DataTransferError.invalidFile("无法读取 Excel 工作表。")
+            throw DataTransferError.invalidFile(L10n.text("无法读取 Excel 工作表。"))
         }
         parser.delegate = self
         let succeeded = parser.parse()
         if let capturedError { throw capturedError }
         guard succeeded else {
-            throw parser.parserError ?? DataTransferError.invalidFile("Excel 工作表 XML 无效。")
+            throw parser.parserError ?? DataTransferError.invalidFile(L10n.text("Excel 工作表 XML 无效。"))
         }
         guard headerMap != nil else {
-            throw DataTransferError.invalidFile("Excel 工作表缺少字段。")
+            throw DataTransferError.invalidFile(L10n.text("Excel 工作表缺少字段。"))
         }
     }
 
@@ -922,7 +928,7 @@ private nonisolated final class WorksheetRecordParser: NSObject, XMLParserDelega
                 }
             } catch {
                 capturedError = DataTransferError.invalidFile(
-                    "Excel 第 \(rowNumber) 行无效：\(error.localizedDescription)"
+                    L10n.format("Excel 第 %lld 行无效：%@", Int64(rowNumber), error.localizedDescription)
                 )
                 parser.abortParsing()
             }

@@ -2,7 +2,8 @@
 set -euo pipefail
 
 MODE="${1:-run}"
-APP_NAME="KeyDiary"
+APP_NAME="键盘日记"
+LEGACY_APP_NAME="KeyDiary"
 PROJECT="KeyDiary.xcodeproj"
 SCHEME="KeyDiary"
 BUILD_DIR="$(pwd)/.build"
@@ -14,6 +15,7 @@ if [[ -z "${DEVELOPER_DIR:-}" && -d "/Applications/Xcode-beta.app/Contents/Devel
 fi
 
 pkill -x "$APP_NAME" >/dev/null 2>&1 || true
+pkill -x "$LEGACY_APP_NAME" >/dev/null 2>&1 || true
 
 xcodebuild \
   -project "$PROJECT" \

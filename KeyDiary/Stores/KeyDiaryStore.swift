@@ -80,11 +80,11 @@ final class KeyDiaryStore {
     var selectedDateRangeTitle: String {
         switch rangeSelection {
         case .recentDays(1):
-            return "今天"
+            return L10n.text("今天")
         case .recentDays(let dayCount):
-            return "近 \(dayCount) 天"
+            return L10n.format("近 %lld 天", Int64(dayCount))
         case .all:
-            return "全部时间"
+            return L10n.text("全部时间")
         case .custom:
             let start = fromDate.formatted(.dateTime.month().day())
             let end = toDate.formatted(.dateTime.month().day())
@@ -120,21 +120,21 @@ final class KeyDiaryStore {
         guard playbackRecordCount > 0 else { return "--" }
 
         let seconds = max(Int(estimatedPlaybackDuration.rounded(.up)), 1)
-        if seconds < 60 { return "\(seconds) 秒" }
+        if seconds < 60 { return L10n.format("%lld 秒", Int64(seconds)) }
 
         let minutes = seconds / 60
         let remainingSeconds = seconds % 60
         if minutes < 60 {
             return remainingSeconds == 0
-                ? "\(minutes) 分钟"
-                : "\(minutes)分 \(remainingSeconds)秒"
+                ? L10n.format("%lld 分钟", Int64(minutes))
+                : L10n.format("%lld分 %lld秒", Int64(minutes), Int64(remainingSeconds))
         }
 
         let hours = minutes / 60
         let remainingMinutes = minutes % 60
         return remainingMinutes == 0
-            ? "\(hours) 小时"
-            : "\(hours)小时 \(remainingMinutes)分"
+            ? L10n.format("%lld 小时", Int64(hours))
+            : L10n.format("%lld小时 %lld分", Int64(hours), Int64(remainingMinutes))
     }
 
     init(database: KeyDiaryDatabase? = nil, now: Date = .now) {
@@ -169,8 +169,11 @@ final class KeyDiaryStore {
         scheduleDayRollover(from: now)
         if let startupError {
             dataTransferNotice = DataTransferNotice(
-                title: "本地数据库不可用",
-                message: "本次运行将使用临时内存存储。\(startupError.localizedDescription)"
+                title: L10n.text("本地数据库不可用"),
+                message: L10n.format(
+                    "本次运行将使用临时内存存储。%@",
+                    startupError.localizedDescription
+                )
             )
         }
     }
@@ -427,13 +430,17 @@ final class KeyDiaryStore {
                     self?.playbackVideoExportProgress = progress
                 }
                 self.dataTransferNotice = DataTransferNotice(
-                    title: "视频已导出",
-                    message: "已录制 \(records.count.formatted()) 次按键的 \(settings.shortTitle) 回放视频。"
+                    title: L10n.text("视频已导出"),
+                    message: L10n.format(
+                        "已录制 %@ 次按键的 %@ 回放视频。",
+                        records.count.formatted(),
+                        settings.shortTitle
+                    )
                 )
             } catch is CancellationError {
                 self.dataTransferNotice = DataTransferNotice(
-                    title: "已取消录制",
-                    message: "未完成的视频文件已移除。"
+                    title: L10n.text("已取消录制"),
+                    message: L10n.text("未完成的视频文件已移除。")
                 )
             } catch {
                 self.present(error: error, title: "视频导出失败")
@@ -463,8 +470,12 @@ final class KeyDiaryStore {
             switch result {
             case .success(let report):
                 self.dataTransferNotice = DataTransferNotice(
-                    title: "导出完成",
-                    message: "已将 \(report.exported.formatted()) 条记录导出为 \(format.title)。"
+                    title: L10n.text("导出完成"),
+                    message: L10n.format(
+                        "已将 %@ 条记录导出为 %@。",
+                        report.exported.formatted(),
+                        format.title
+                    )
                 )
             case .failure(let error):
                 self.present(error: error, title: "导出失败")
@@ -501,14 +512,19 @@ final class KeyDiaryStore {
             case .success(let payload):
                 let (report, backupURL) = payload
                 let duplicateText = report.duplicates > 0
-                    ? "，跳过 \(report.duplicates.formatted()) 条重复记录"
+                    ? L10n.format("，跳过 %@ 条重复记录", report.duplicates.formatted())
                     : ""
                 let backupText = backupURL == nil
                     ? ""
-                    : "替换前的数据已自动备份为 JSON。"
+                    : L10n.text("替换前的数据已自动备份为 JSON。")
                 self.dataTransferNotice = DataTransferNotice(
-                    title: "导入完成",
-                    message: "已导入 \(report.inserted.formatted()) 条记录\(duplicateText)。\(backupText)"
+                    title: L10n.text("导入完成"),
+                    message: L10n.format(
+                        "已导入 %@ 条记录%@。%@",
+                        report.inserted.formatted(),
+                        duplicateText,
+                        backupText
+                    )
                 )
             case .failure(let error):
                 self.present(error: error, title: "导入失败")
@@ -779,7 +795,10 @@ final class KeyDiaryStore {
     }
 
     private func present(error: Error, title: String) {
-        dataTransferNotice = DataTransferNotice(title: title, message: error.localizedDescription)
+        dataTransferNotice = DataTransferNotice(
+            title: L10n.text(title),
+            message: error.localizedDescription
+        )
     }
 
     private static func endOfDay(containing date: Date, calendar: Calendar = .current) -> Date {

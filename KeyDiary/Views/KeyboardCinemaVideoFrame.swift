@@ -78,7 +78,7 @@ struct KeyboardCinemaVideoFrame: View {
                     .foregroundStyle(themeColor)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("KEY DIARY")
+                    Text(L10n.text("KEY DIARY"))
                         .font(.system(size: 25, weight: .bold, design: .rounded))
                         .tracking(1.8)
                     Text("键盘像素影院")
@@ -89,7 +89,14 @@ struct KeyboardCinemaVideoFrame: View {
 
             Spacer()
 
-            Text("\(colorMode.title)  ·  \(framingMode.title)取景\(isInverted ? "  ·  已反相" : "")")
+            Text(
+                L10n.format(
+                    "%@  ·  %@取景%@",
+                    colorMode.title,
+                    framingMode.title,
+                    isInverted ? L10n.text("  ·  已反相") : ""
+                )
+            )
                 .font(.system(size: 18, weight: .medium, design: .rounded))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

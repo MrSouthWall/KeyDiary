@@ -15,10 +15,10 @@ enum KeyboardDisplayMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .live: "实时"
-        case .statistics: "统计"
-        case .playback: "回放"
-        case .cinema: "像素影院"
+        case .live: L10n.text("实时")
+        case .statistics: L10n.text("统计")
+        case .playback: L10n.text("回放")
+        case .cinema: L10n.text("像素影院")
         }
     }
 

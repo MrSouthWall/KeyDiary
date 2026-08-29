@@ -77,11 +77,11 @@ struct KeyDiarySettingsView: View {
                         }
                     }
 
-                    Text("请在“通用 > 登录项与扩展”中允许 Key Diary 在登录时运行。")
+                    Text("请在“通用 > 登录项与扩展”中允许“键盘日记”在登录时运行。")
                         .font(.caption)
                         .foregroundStyle(.orange)
                 } else if let errorMessage = launchAtLogin.errorMessage {
-                    Text("无法更新登录项：\(errorMessage)")
+                    Text(L10n.format("无法更新登录项：%@", errorMessage))
                         .font(.caption)
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
@@ -164,7 +164,12 @@ struct KeyDiarySettingsView: View {
                 .disabled(!isKeySoundEnabled)
 
                 HStack(alignment: .firstTextBaseline) {
-                    Text("\(selectedKeySoundStyle.detail) 自动记录和回放时会播放，导出视频也会包含声音。")
+                    Text(
+                        L10n.format(
+                            "%@ 自动记录和回放时会播放，导出视频也会包含声音。",
+                            selectedKeySoundStyle.detail
+                        )
+                    )
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -188,7 +193,7 @@ struct KeyDiarySettingsView: View {
 
             Section("数据") {
                 LabeledContent("本机记录") {
-                    Text("\(store.recordCount.formatted()) 条")
+                    Text(L10n.format("%@ 条", store.recordCount.formatted()))
                         .foregroundStyle(.secondary)
                         .contentTransition(.numericText())
                 }
@@ -342,8 +347,8 @@ struct KeyDiarySettingsView: View {
     }
 
     private var statusTitle: String {
-        if !store.hasInputMonitoringPermission { return "需要输入监控权限" }
-        return store.isRecording ? "正在记录" : "记录已暂停"
+        if !store.hasInputMonitoringPermission { return L10n.text("需要输入监控权限") }
+        return store.isRecording ? L10n.text("正在记录") : L10n.text("记录已暂停")
     }
 
     private var statusColor: Color {

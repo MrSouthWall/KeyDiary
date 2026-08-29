@@ -44,7 +44,13 @@ struct PlaybackRangeTimeline: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(themeColor)
 
-            Text("\(store.playbackRecordCount.formatted()) 次按键 · 回放约 \(store.estimatedPlaybackDurationTitle)")
+            Text(
+                L10n.format(
+                    "%@ 次按键 · 回放约 %@",
+                    store.playbackRecordCount.formatted(),
+                    store.estimatedPlaybackDurationTitle
+                )
+            )
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .contentTransition(.numericText())
@@ -98,7 +104,7 @@ struct PlaybackRangeTimeline: View {
 
     private func rangeLabel(title: String, date: Date?, alignment: HorizontalAlignment) -> some View {
         VStack(alignment: alignment, spacing: 1) {
-            Text(title)
+            Text(L10n.text(title))
                 .font(.system(size: 9, weight: .medium))
                 .foregroundStyle(.tertiary)
             Text(date.map(playbackDateTitle) ?? "--")
@@ -205,7 +211,7 @@ struct PlaybackRangeTimeline: View {
             isActive: activeDragTarget == target,
             isHovered: hoveredDragTarget == target
         )
-            .accessibilityLabel(title)
+            .accessibilityLabel(L10n.text(title))
             .accessibilityValue(playbackDateTitle(store.playbackDate(
                 at: isStart ? displayedStartFraction : displayedEndFraction
             )))
@@ -222,7 +228,12 @@ struct PlaybackRangeTimeline: View {
             .onHover { isHovered in
                 hoveredDragTarget = isHovered ? target : nil
             }
-            .help("拖动调整\(isStart ? "开始" : "结束")时间")
+            .help(
+                L10n.format(
+                    "拖动调整%@时间",
+                    isStart ? L10n.text("开始") : L10n.text("结束")
+                )
+            )
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .named("playback-range-track"))
                     .onChanged { value in
@@ -320,29 +331,29 @@ struct PlaybackRangeTimeline: View {
 
     private func durationTitle(_ duration: TimeInterval) -> String {
         let seconds = max(Int(duration.rounded()), 0)
-        if seconds < 60 { return "\(seconds) 秒" }
+        if seconds < 60 { return L10n.format("%lld 秒", Int64(seconds)) }
 
         let minutes = seconds / 60
         let remainingSeconds = seconds % 60
         if minutes < 60 {
             return remainingSeconds == 0
-                ? "\(minutes) 分钟"
-                : "\(minutes) 分 \(remainingSeconds) 秒"
+                ? L10n.format("%lld 分钟", Int64(minutes))
+                : L10n.format("%lld 分 %lld 秒", Int64(minutes), Int64(remainingSeconds))
         }
 
         let hours = minutes / 60
         let remainingMinutes = minutes % 60
         if hours < 24 {
             return remainingMinutes == 0
-                ? "\(hours) 小时"
-                : "\(hours) 小时 \(remainingMinutes) 分"
+                ? L10n.format("%lld 小时", Int64(hours))
+                : L10n.format("%lld 小时 %lld 分", Int64(hours), Int64(remainingMinutes))
         }
 
         let days = hours / 24
         let remainingHours = hours % 24
         return remainingHours == 0
-            ? "\(days) 天"
-            : "\(days) 天 \(remainingHours) 小时"
+            ? L10n.format("%lld 天", Int64(days))
+            : L10n.format("%lld 天 %lld 小时", Int64(days), Int64(remainingHours))
     }
 
     private var timelineTickFractions: [Double] {

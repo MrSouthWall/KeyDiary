@@ -26,7 +26,7 @@ struct OpenSourceProjectsSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Text("Key Diary 使用了 kbsim 提供的 13 套机械键盘按下与松开音频采样。音频文件依照 MIT 许可证随应用分发。")
+                Text("键盘日记使用了 kbsim 提供的 13 套机械键盘按下与松开音频采样。音频文件依照 MIT 许可证随应用分发。")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -49,7 +49,7 @@ struct OpenSourceProjectsSettingsView: View {
     private var licenseText: String {
         guard let url = Bundle.main.url(forResource: "kbsim-LICENSE", withExtension: "txt"),
               let text = try? String(contentsOf: url, encoding: .utf8) else {
-            return "许可证文本未能载入。请访问 kbsim 项目页面查看 MIT License。"
+            return L10n.text("许可证文本未能载入。请访问 kbsim 项目页面查看 MIT License。")
         }
         return text
     }

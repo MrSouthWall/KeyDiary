@@ -16,10 +16,16 @@ struct KeyboardCinemaTimeline: View {
                     .foregroundStyle(themeColor)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(player.videoTitle ?? "键盘像素影院")
+                    Text(player.videoTitle ?? L10n.text("键盘像素影院"))
                         .font(.caption.weight(.semibold))
                         .lineLimit(1)
-                    Text("84 个\(player.colorMode.title)采样像素 · \(player.framingMode.title)取景 · 保留键帽字符与立体材质")
+                    Text(
+                        L10n.format(
+                            "84 个%@采样像素 · %@取景 · 保留键帽字符与立体材质",
+                            player.colorMode.title,
+                            player.framingMode.title
+                        )
+                    )
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

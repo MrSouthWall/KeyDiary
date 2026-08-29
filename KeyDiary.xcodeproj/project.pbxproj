@@ -22,7 +22,7 @@
 
 /* Begin PBXFileReference section */
 		A10000000000000000000001 /* KeyDiaryTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KeyDiaryTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		BFFE84ED303DB14F003A5B03 /* KeyDiary.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = KeyDiary.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BFFE84ED303DB14F003A5B03 /* 键盘日记.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "键盘日记.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -65,7 +65,7 @@
 		BFFE84EE303DB14F003A5B03 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				BFFE84ED303DB14F003A5B03 /* KeyDiary.app */,
+				BFFE84ED303DB14F003A5B03 /* 键盘日记.app */,
 				A10000000000000000000001 /* KeyDiaryTests.xctest */,
 			);
 			name = Products;
@@ -113,7 +113,7 @@
 				C10000000000000000000003 /* ZIPFoundation */,
 			);
 			productName = KeyDiary;
-			productReference = BFFE84ED303DB14F003A5B03 /* KeyDiary.app */;
+			productReference = BFFE84ED303DB14F003A5B03 /* 键盘日记.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -140,6 +140,7 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				"zh-Hans",
 				Base,
 			);
 			mainGroup = BFFE84E4303DB14F003A5B03;
@@ -207,7 +208,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/KeyDiary.app/Contents/MacOS/KeyDiary";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/键盘日记.app/Contents/MacOS/键盘日记";
 			};
 			name = Debug;
 		};
@@ -225,7 +226,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/KeyDiary.app/Contents/MacOS/KeyDiary";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/键盘日记.app/Contents/MacOS/键盘日记";
 			};
 			name = Release;
 		};
@@ -363,6 +364,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "键盘日记";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -374,7 +376,8 @@
 					"-lsqlite3",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.MrSouthWall.KeyDiary;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_MODULE_NAME = KeyDiary;
+				PRODUCT_NAME = "键盘日记";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -399,6 +402,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "键盘日记";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -410,7 +414,8 @@
 					"-lsqlite3",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.MrSouthWall.KeyDiary;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_MODULE_NAME = KeyDiary;
+				PRODUCT_NAME = "键盘日记";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;

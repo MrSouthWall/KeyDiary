@@ -2,7 +2,7 @@
 
 ## kbsim
 
-Key Diary includes mechanical keyboard audio samples from
+键盘日记 (Key Diary) includes mechanical keyboard audio samples from
 [tplai/kbsim](https://github.com/tplai/kbsim), revision
 `ba103f3b0afa9dab80447aa2e7e2ed80b6bd80e4`.
 

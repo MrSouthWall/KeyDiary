@@ -1,10 +1,13 @@
 <div align="center">
-  <img src="KeyDiary/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="128" height="128" alt="Key Diary 图标">
-  <h1>Key Diary</h1>
+  <img src="KeyDiary/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="128" height="128" alt="键盘日记图标">
+  <h1>键盘日记</h1>
   <p>在 Mac 上记录、观察与回放你的每一次按键。</p>
 </div>
 
-Key Diary 是一款原生 macOS 菜单栏应用。它通过一张可视化键盘呈现实时输入，按日期与 App 汇总按键次数，并可以回放历史记录、导出键盘动画视频，或让整张键盘变成一块像素视频屏幕。
+键盘日记是一款原生 macOS 菜单栏应用。它通过一张可视化键盘呈现实时输入，按日期与 App 汇总按键次数，并可以回放历史记录、导出键盘动画视频，或让整张键盘变成一块像素视频屏幕。
+
+> [!NOTE]
+> **AI 生成声明：** 本项目完全由人工智能生成，包括产品设计、代码实现、资源整理、测试与文档编写。
 
 ## 功能亮点
 
@@ -39,7 +42,7 @@ open KeyDiary.xcodeproj
 
 > 系统设置 → 隐私与安全性 → 输入监控
 
-授权 Key Diary 后重新启用记录即可。
+授权“键盘日记”后重新启用记录即可。
 
 仓库也提供了开发脚本。若 `/Applications/Xcode-beta.app` 存在，脚本会优先使用它：
 
@@ -47,7 +50,7 @@ open KeyDiary.xcodeproj
 ./script/build_and_run.sh             # 构建并运行
 ./script/build_and_run.sh --debug     # 使用 LLDB 启动
 ./script/build_and_run.sh --logs      # 查看应用进程日志
-./script/build_and_run.sh --telemetry # 查看 Key Diary 子系统日志
+./script/build_and_run.sh --telemetry # 查看键盘日记子系统日志
 ./script/build_and_run.sh --verify    # 构建、运行并检查进程
 ```
 
@@ -66,7 +69,7 @@ xcodebuild test \
 
 ## 隐私与数据
 
-Key Diary 使用只读的系统事件监听，不会拦截或修改原始键盘事件。每条记录包含：
+键盘日记使用只读的系统事件监听，不会拦截或修改原始键盘事件。每条记录包含：
 
 - 时间戳
 - 键码与按键标签
@@ -122,7 +125,7 @@ KeyDiary/
 
 ## 开源许可
 
-Key Diary 基于 [MIT License](LICENSE) 开源。你可以自由使用、复制、修改、合并、发布和分发本项目，但须保留原始版权与许可声明。
+键盘日记基于 [MIT License](LICENSE) 开源。你可以自由使用、复制、修改、合并、发布和分发本项目，但须保留原始版权与许可声明。
 
 ## 第三方资源
 

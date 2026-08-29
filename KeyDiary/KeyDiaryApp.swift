@@ -15,7 +15,7 @@ struct KeyDiaryApp: App {
     @AppStorage(KeyDiaryTheme.accentColorStorageKey) private var accentColorHex = KeyDiaryTheme.defaultAccentHex
 
     var body: some Scene {
-        WindowGroup("Key Diary", id: "main") {
+        WindowGroup("键盘日记", id: "main") {
             ContentView(store: appDelegate.store, videoPlayer: appDelegate.videoPlayer)
                 .background {
                     DockVisibilityBridge(controller: appDelegate.dockVisibility)

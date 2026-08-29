@@ -206,7 +206,7 @@ final class KeyDiaryStoreTests: XCTestCase {
         let store = KeyDiaryStore(database: database, now: now)
 
         XCTAssertEqual(store.selectedDateRangeSelection, .recentDays(1))
-        XCTAssertEqual(store.selectedDateRangeTitle, "今天")
+        XCTAssertEqual(store.selectedDateRangeTitle, L10n.text("今天"))
         XCTAssertEqual(store.fromDate, calendar.startOfDay(for: now))
         XCTAssertEqual(store.toDate, endOfDay(now, calendar: calendar))
         XCTAssertEqual(store.filteredRecordCount, 1)
@@ -258,9 +258,9 @@ final class KeyDiaryStoreTests: XCTestCase {
         ])
         let store = KeyDiaryStore(database: database, now: now.addingTimeInterval(4))
 
-        XCTAssertEqual(store.selectedDateRangeTitle, "今天")
+        XCTAssertEqual(store.selectedDateRangeTitle, L10n.text("今天"))
         XCTAssertEqual(store.estimatedPlaybackDuration, 1.54, accuracy: 0.001)
-        XCTAssertEqual(store.estimatedPlaybackDurationTitle, "2 秒")
+        XCTAssertEqual(store.estimatedPlaybackDurationTitle, L10n.format("%lld 秒", Int64(2)))
 
         store.playbackSpeed = 2
 

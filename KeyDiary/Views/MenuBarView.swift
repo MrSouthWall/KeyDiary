@@ -25,7 +25,7 @@ struct MenuBarView: View {
         .disabled(!store.hasInputMonitoringPermission)
 
         Label {
-            Text("今日已按键 \(store.pressesToday.formatted()) 次")
+            Text(L10n.format("今日已按键 %@ 次", store.pressesToday.formatted()))
         } icon: { }
         Divider()
 
@@ -91,8 +91,8 @@ struct MenuBarView: View {
     }
 
     private var statusText: String {
-        if !store.hasInputMonitoringPermission { return "需要输入监控权限" }
-        return store.isRecording ? "记录中" : "记录已暂停"
+        if !store.hasInputMonitoringPermission { return L10n.text("需要输入监控权限") }
+        return store.isRecording ? L10n.text("记录中") : L10n.text("记录已暂停")
     }
 
     private var statusColor: Color {

@@ -148,7 +148,7 @@ struct PlaybackVideoExportPanel: View {
         _ title: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        LabeledContent(title) {
+        LabeledContent(L10n.text(title)) {
             content()
                 .labelsHidden()
                 .frame(width: 230)

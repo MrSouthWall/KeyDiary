@@ -14,8 +14,8 @@ enum KeyboardPixelColorMode: String, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .color: "彩色"
-        case .binary: "黑白"
+        case .color: L10n.text("彩色")
+        case .binary: L10n.text("黑白")
         }
     }
 }
@@ -29,17 +29,17 @@ enum KeyboardVideoFramingMode: String, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .fit: "适合"
-        case .fill: "填充"
-        case .stretch: "拉伸"
+        case .fit: L10n.text("适合")
+        case .fill: L10n.text("填充")
+        case .stretch: L10n.text("拉伸")
         }
     }
 
     var helpText: String {
         switch self {
-        case .fit: "完整显示画面，空余键位使用黑色"
-        case .fill: "保持比例并裁切画面，铺满全部键位"
-        case .stretch: "不保持比例，将完整画面拉伸至全部键位"
+        case .fit: L10n.text("完整显示画面，空余键位使用黑色")
+        case .fill: L10n.text("保持比例并裁切画面，铺满全部键位")
+        case .stretch: L10n.text("不保持比例，将完整画面拉伸至全部键位")
         }
     }
 }

@@ -65,13 +65,13 @@ final class KeyboardVideoPlayer {
         }
 
         guard let url = Bundle.main.url(forResource: "BadApple", withExtension: "mp4") else {
-            errorMessage = "找不到内置的 Bad Apple 视频。"
+            errorMessage = L10n.text("找不到内置的 Bad Apple 视频。")
             return
         }
         framingMode = .fill
         loadVideo(
             from: url,
-            title: "Bad Apple!! 影絵 PV",
+            title: L10n.text("Bad Apple!! 影絵 PV"),
             autoplay: autoplay,
             initialColorMode: .binary
         )
@@ -132,7 +132,7 @@ final class KeyboardVideoPlayer {
             } catch {
                 guard !Task.isCancelled else { return }
                 self.isLoading = false
-                self.errorMessage = "无法读取视频：\(error.localizedDescription)"
+                self.errorMessage = L10n.format("无法读取视频：%@", error.localizedDescription)
             }
         }
     }
@@ -211,17 +211,20 @@ final class KeyboardVideoPlayer {
                     self?.videoExportProgress = progress
                 }
                 self.exportNotice = DataTransferNotice(
-                    title: "像素视频已导出",
-                    message: "已导出 \(settings.shortTitle) 键盘像素视频；原片含音轨时已保留原声。"
+                    title: L10n.text("像素视频已导出"),
+                    message: L10n.format(
+                        "已导出 %@ 键盘像素视频；原片含音轨时已保留原声。",
+                        settings.shortTitle
+                    )
                 )
             } catch is CancellationError {
                 self.exportNotice = DataTransferNotice(
-                    title: "已取消录制",
-                    message: "未完成的视频文件已移除。"
+                    title: L10n.text("已取消录制"),
+                    message: L10n.text("未完成的视频文件已移除。")
                 )
             } catch {
                 self.exportNotice = DataTransferNotice(
-                    title: "像素视频导出失败",
+                    title: L10n.text("像素视频导出失败"),
                     message: error.localizedDescription
                 )
             }
@@ -305,7 +308,7 @@ private enum KeyboardVideoError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidDuration: "视频时长无效"
+        case .invalidDuration: L10n.text("视频时长无效")
         }
     }
 }

@@ -20,8 +20,8 @@ enum KeyboardLayoutMode: String, CaseIterable, Identifiable {
 
     var accessibilityTitle: String {
         switch self {
-        case .qwerty: "QWERTY 排列"
-        case .alphabetical: "字母顺序排列"
+        case .qwerty: L10n.text("QWERTY 排列")
+        case .alphabetical: L10n.text("字母顺序排列")
         }
     }
 

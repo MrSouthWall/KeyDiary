@@ -17,11 +17,11 @@ private enum DataEditorRangePreset: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .today: "今天"
-        case .recent7Days: "最近 7 天"
-        case .recent30Days: "最近 30 天"
-        case .all: "全部时间"
-        case .custom: "自定义"
+        case .today: L10n.text("今天")
+        case .recent7Days: L10n.text("最近 7 天")
+        case .recent30Days: L10n.text("最近 30 天")
+        case .all: L10n.text("全部时间")
+        case .custom: L10n.text("自定义")
         }
     }
 }
@@ -76,13 +76,13 @@ private final class DataEditorViewModel {
     var filterHint: String {
         switch issueFilter {
         case .potentialIssues:
-            "包含缺少 App、缺少按键、未来时间和疑似重复；缺少 Bundle ID 可单独筛选。"
+            L10n.text("包含缺少 App、缺少按键、未来时间和疑似重复；缺少 Bundle ID 可单独筛选。")
         case .suspectedDuplicate:
-            "时间、按键、App 和 Bundle ID 完全相同的记录会标记为疑似重复。"
+            L10n.text("时间、按键、App 和 Bundle ID 完全相同的记录会标记为疑似重复。")
         case .all:
-            "显示当前时间和 App 范围内的全部原始记录。"
+            L10n.text("显示当前时间和 App 范围内的全部原始记录。")
         default:
-            "只显示符合“\(issueFilter.title)”规则的记录。"
+            L10n.format("只显示符合“%@”规则的记录。", issueFilter.title)
         }
     }
 
@@ -114,7 +114,10 @@ private final class DataEditorViewModel {
         } catch {
             records = []
             totalCount = 0
-            notice = DataEditorNotice(title: "无法读取数据", message: error.localizedDescription)
+            notice = DataEditorNotice(
+                title: L10n.text("无法读取数据"),
+                message: error.localizedDescription
+            )
         }
     }
 
@@ -141,14 +144,17 @@ private final class DataEditorViewModel {
         do {
             let deleted = try store.deleteRecords(ids: ids)
             selection.removeAll()
-            operationStatus = "已删除 \(deleted.formatted()) 条记录"
+            operationStatus = L10n.format("已删除 %@ 条记录", deleted.formatted())
             if let selectedApplication,
                !applicationOptions.contains(selectedApplication) {
                 self.selectedApplication = nil
             }
             reload(resetPage: false, clearSelection: false)
         } catch {
-            notice = DataEditorNotice(title: "无法删除记录", message: error.localizedDescription)
+            notice = DataEditorNotice(
+                title: L10n.text("无法删除记录"),
+                message: error.localizedDescription
+            )
         }
     }
 
@@ -213,7 +219,7 @@ struct DataEditorView: View {
             model.reload()
         }
         .confirmationDialog(
-            "删除选中的 \(model.selection.count.formatted()) 条记录？",
+            L10n.format("删除选中的 %@ 条记录？", model.selection.count.formatted()),
             isPresented: $isShowingDeleteConfirmation
         ) {
             Button("永久删除", role: .destructive) {
@@ -356,7 +362,7 @@ struct DataEditorView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            Text("共 \(model.totalCount.formatted()) 条")
+            Text(L10n.format("共 %@ 条", model.totalCount.formatted()))
                 .foregroundStyle(.secondary)
 
             if let operationStatus = model.operationStatus {
@@ -367,12 +373,20 @@ struct DataEditorView: View {
 
             Spacer()
 
-            Button(currentPageIsSelected ? "取消本页选择" : "选择本页") {
+            Button(
+                currentPageIsSelected ? L10n.text("取消本页选择") : L10n.text("选择本页")
+            ) {
                 model.toggleCurrentPageSelection()
             }
             .disabled(model.records.isEmpty)
 
-            Text("第 \((model.pageIndex + 1).formatted()) / \(model.pageCount.formatted()) 页")
+            Text(
+                L10n.format(
+                    "第 %@ / %@ 页",
+                    (model.pageIndex + 1).formatted(),
+                    model.pageCount.formatted()
+                )
+            )
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
 
@@ -400,8 +414,8 @@ struct DataEditorView: View {
             .disabled(model.selection.isEmpty || model.isDeleteUnavailable)
             .help(
                 model.isDeleteUnavailable
-                    ? "请等待导入、导出或视频生成结束"
-                    : "永久删除选中的记录"
+                    ? L10n.text("请等待导入、导出或视频生成结束")
+                    : L10n.text("永久删除选中的记录")
             )
         }
         .padding(.horizontal, 16)
@@ -479,16 +493,17 @@ struct DataEditorView: View {
         return HStack(spacing: 6) {
             Image(systemName: titles.isEmpty ? "checkmark.circle" : "exclamationmark.triangle.fill")
                 .foregroundStyle(titles.isEmpty ? Color.secondary : Color.orange)
-            Text(titles.isEmpty ? "—" : titles.joined(separator: "、"))
+            Text(titles.isEmpty ? "—" : titles.joined(separator: L10n.text("、")))
                 .lineLimit(1)
-                .help(titles.joined(separator: "、"))
+                .help(titles.joined(separator: L10n.text("、")))
         }
     }
 
     private func applicationTitle(_ application: String) -> String {
-        application.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "（未标记 App）"
-            : application
+        if application.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return L10n.text("（未标记 App）")
+        }
+        return application == "Unknown app" ? L10n.text("Unknown app") : application
     }
 
     private func emptyFallback(_ value: String?) -> String {

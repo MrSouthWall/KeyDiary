@@ -11,7 +11,7 @@ nonisolated enum DataEditorError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .operationInProgress:
-            "请等待当前导入、导出或视频生成结束后再删除记录。"
+            L10n.text("请等待当前导入、导出或视频生成结束后再删除记录。")
         }
     }
 }
@@ -25,11 +25,11 @@ nonisolated enum DataQualityIssue: String, CaseIterable, Hashable, Sendable {
 
     var title: String {
         switch self {
-        case .missingApplication: "缺少 App"
-        case .missingKey: "缺少按键"
-        case .missingBundleIdentifier: "缺少 Bundle ID"
-        case .futureTimestamp: "时间在未来"
-        case .suspectedDuplicate: "疑似重复"
+        case .missingApplication: L10n.text("缺少 App")
+        case .missingKey: L10n.text("缺少按键")
+        case .missingBundleIdentifier: L10n.text("缺少 Bundle ID")
+        case .futureTimestamp: L10n.text("时间在未来")
+        case .suspectedDuplicate: L10n.text("疑似重复")
         }
     }
 }
@@ -47,13 +47,13 @@ nonisolated enum DataIssueFilter: String, CaseIterable, Identifiable, Hashable, 
 
     var title: String {
         switch self {
-        case .all: "全部记录"
-        case .potentialIssues: "潜在异常"
-        case .missingApplication: "缺少 App"
-        case .missingKey: "缺少按键"
-        case .missingBundleIdentifier: "缺少 Bundle ID"
-        case .futureTimestamp: "时间在未来"
-        case .suspectedDuplicate: "疑似重复"
+        case .all: L10n.text("全部记录")
+        case .potentialIssues: L10n.text("潜在异常")
+        case .missingApplication: L10n.text("缺少 App")
+        case .missingKey: L10n.text("缺少按键")
+        case .missingBundleIdentifier: L10n.text("缺少 Bundle ID")
+        case .futureTimestamp: L10n.text("时间在未来")
+        case .suspectedDuplicate: L10n.text("疑似重复")
         }
     }
 }

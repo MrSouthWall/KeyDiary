@@ -109,7 +109,7 @@ struct KeyDiaryStatusBar: View {
             store.isPlaying ? store.stopPlayback() : store.playFilteredRecords()
         } label: {
             Label(
-                store.isPlaying ? "停止" : "播放",
+                store.isPlaying ? L10n.text("停止") : L10n.text("播放"),
                 systemImage: store.isPlaying ? "stop.fill" : "play.fill"
             )
             .font(.system(size: 14, weight: .semibold))
@@ -124,7 +124,7 @@ struct KeyDiaryStatusBar: View {
             (store.playbackRecordCount == 0 && !store.isPlaying) ||
             store.isPlaybackVideoExportInProgress
         )
-        .help(store.isPlaying ? "停止回放" : "回放时间轴选中区间")
+        .help(store.isPlaying ? L10n.text("停止回放") : L10n.text("回放时间轴选中区间"))
     }
 
     private var playbackSoundButton: some View {
@@ -147,9 +147,13 @@ struct KeyDiaryStatusBar: View {
         }
         .buttonStyle(.plain)
         .disabled(store.isPlaybackVideoExportInProgress)
-        .help(isKeySoundEnabled ? "关闭回放和视频按键声音" : "启用回放和视频按键声音")
+        .help(
+            isKeySoundEnabled
+                ? L10n.text("关闭回放和视频按键声音")
+                : L10n.text("启用回放和视频按键声音")
+        )
         .accessibilityLabel("回放声音")
-        .accessibilityValue(isKeySoundEnabled ? "已启用" : "已关闭")
+        .accessibilityValue(isKeySoundEnabled ? L10n.text("已启用") : L10n.text("已关闭"))
         .accessibilityAddTraits(isKeySoundEnabled ? .isSelected : [])
     }
 
@@ -175,7 +179,7 @@ struct KeyDiaryStatusBar: View {
             videoPlayer.togglePlayback()
         } label: {
             Label(
-                videoPlayer.isPlaying ? "暂停" : "播放",
+                videoPlayer.isPlaying ? L10n.text("暂停") : L10n.text("播放"),
                 systemImage: videoPlayer.isPlaying ? "pause.fill" : "play.fill"
             )
             .font(.system(size: 14, weight: .semibold))
@@ -192,7 +196,9 @@ struct KeyDiaryStatusBar: View {
             videoPlayer.isVideoExportInProgress
         )
         .keyboardShortcut(.space, modifiers: [])
-        .help(videoPlayer.isPlaying ? "暂停像素视频" : "继续播放像素视频")
+        .help(
+            videoPlayer.isPlaying ? L10n.text("暂停像素视频") : L10n.text("继续播放像素视频")
+        )
     }
 
     private var cinemaPreviewButton: some View {
@@ -222,8 +228,10 @@ struct KeyDiaryStatusBar: View {
         }
         .buttonStyle(.plain)
         .disabled(videoPlayer.isVideoExportInProgress)
-        .help(videoPlayer.isInverted ? "恢复视频颜色" : "反转视频颜色")
-        .accessibilityValue(videoPlayer.isInverted ? "已开启" : "已关闭")
+        .help(
+            videoPlayer.isInverted ? L10n.text("恢复视频颜色") : L10n.text("反转视频颜色")
+        )
+        .accessibilityValue(videoPlayer.isInverted ? L10n.text("已开启") : L10n.text("已关闭"))
     }
 
     private var cinemaColorModeButton: some View {
@@ -245,7 +253,11 @@ struct KeyDiaryStatusBar: View {
         }
         .buttonStyle(.plain)
         .disabled(!videoPlayer.hasVideo || videoPlayer.isVideoExportInProgress)
-        .help(videoPlayer.colorMode == .binary ? "切换到彩色采样" : "切换到无灰阶的黑白二值采样")
+        .help(
+            videoPlayer.colorMode == .binary
+                ? L10n.text("切换到彩色采样")
+                : L10n.text("切换到无灰阶的黑白二值采样")
+        )
         .accessibilityLabel("键帽颜色模式")
         .accessibilityValue(videoPlayer.colorMode.title)
     }
@@ -281,7 +293,7 @@ struct KeyDiaryStatusBar: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .disabled(!videoPlayer.hasVideo || videoPlayer.isVideoExportInProgress)
-        .help("取景范围：\(videoPlayer.framingMode.helpText)")
+        .help(L10n.format("取景范围：%@", videoPlayer.framingMode.helpText))
         .accessibilityLabel("取景范围")
         .accessibilityValue(videoPlayer.framingMode.title)
     }
@@ -299,8 +311,8 @@ struct KeyDiaryStatusBar: View {
         }
         .buttonStyle(.plain)
         .disabled(videoPlayer.isVideoExportInProgress)
-        .help(videoPlayer.loops ? "关闭循环播放" : "开启循环播放")
-        .accessibilityValue(videoPlayer.loops ? "已开启" : "已关闭")
+        .help(videoPlayer.loops ? L10n.text("关闭循环播放") : L10n.text("开启循环播放"))
+        .accessibilityValue(videoPlayer.loops ? L10n.text("已开启") : L10n.text("已关闭"))
     }
 
     @ViewBuilder
@@ -509,7 +521,9 @@ private struct DisplayModeTabs: View {
         }
         .buttonStyle(.plain)
         .keyboardShortcut(keyEquivalent(for: mode), modifiers: .command)
-        .help("切换到\(mode.title)模式（⌘\(shortcutNumber(for: mode))）")
+        .help(
+            L10n.format("切换到%@模式（⌘%@）", mode.title, shortcutNumber(for: mode))
+        )
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -555,7 +569,7 @@ private struct DateRangeMenu: View {
         }
         .fixedSize()
         .help("筛选时间范围")
-        .accessibilityLabel("时间筛选，\(store.selectedDateRangeTitle)")
+        .accessibilityLabel(L10n.format("时间筛选，%@", store.selectedDateRangeTitle))
     }
 
     private var selectionPanel: some View {
@@ -637,11 +651,17 @@ private struct ApplicationMenu: View {
         }
         .fixedSize()
         .help("筛选 App")
-        .accessibilityLabel("App 筛选，\(applicationTitle(store.selectedApplication))")
+        .accessibilityLabel(
+            L10n.format("App 筛选，%@", applicationTitle(store.selectedApplication))
+        )
     }
 
     private func applicationTitle(_ application: String) -> String {
-        application == "All apps" ? "全部 App" : application
+        switch application {
+        case "All apps": L10n.text("全部 App")
+        case "Unknown app": L10n.text("Unknown app")
+        default: application
+        }
     }
 }
 
@@ -722,7 +742,9 @@ private struct PlaybackDurationMenu: View {
         }
         .fixedSize()
         .help("预计播放时长；菜单中可调整回放速度")
-        .accessibilityLabel("播放时长，\(store.estimatedPlaybackDurationTitle)")
+        .accessibilityLabel(
+            L10n.format("播放时长，%@", store.estimatedPlaybackDurationTitle)
+        )
     }
 
     private func speedButton(_ speed: Double) -> some View {
@@ -749,8 +771,16 @@ private struct PlaybackDurationMenu: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(speed == 1 ? "正常速度" : "\(compactSpeedTitle(speed)) 速度")
-        .accessibilityLabel(speed == 1 ? "正常速度" : "\(compactSpeedTitle(speed)) 速度")
+        .help(
+            speed == 1
+                ? L10n.text("正常速度")
+                : L10n.format("%@ 速度", compactSpeedTitle(speed))
+        )
+        .accessibilityLabel(
+            speed == 1
+                ? L10n.text("正常速度")
+                : L10n.format("%@ 速度", compactSpeedTitle(speed))
+        )
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -772,10 +802,16 @@ private struct StatusBarOptionLabel: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(tint)
 
-            Text(value)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(L10n.text(caption))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+
+                Text(value)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+            }
 
             Image(systemName: "chevron.down")
                 .font(.system(size: 9, weight: .semibold))
@@ -784,7 +820,7 @@ private struct StatusBarOptionLabel: View {
         .padding(.horizontal, 10)
         .frame(width: width, height: 52)
         .contentShape(Rectangle())
-        .accessibilityLabel("\(caption)，\(value)")
+        .accessibilityLabel(L10n.format("%@，%@", L10n.text(caption), value))
     }
 }
 
@@ -813,7 +849,7 @@ struct StatusSelectionPanel<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Label(title, systemImage: systemImage)
+            Label(L10n.text(title), systemImage: systemImage)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
@@ -840,7 +876,7 @@ private struct StatusSelectionRow: View {
                     .opacity(isSelected ? 1 : 0)
                     .frame(width: 12)
 
-                Text(title)
+                Text(L10n.text(title))
                     .lineLimit(1)
 
                 Spacer(minLength: 8)

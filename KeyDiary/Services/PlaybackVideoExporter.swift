@@ -30,7 +30,7 @@ nonisolated enum PlaybackVideoCodec: String, CaseIterable, Identifiable, Sendabl
         switch self {
         case .h264: "H.264"
         case .h265: "H.265 / HEVC"
-        case .proRes4444Alpha: "ProRes 4444 · 透明"
+        case .proRes4444Alpha: L10n.text("ProRes 4444 · 透明")
         }
     }
 
@@ -195,8 +195,15 @@ nonisolated struct PlaybackVideoSettings: Sendable, Equatable {
     }
 
     var exportDescription: String {
-        let background = preservesAlpha ? "透明背景" : "KeyDiary UI 背景"
-        return "导出为 \(resolution.title) \(container.title)，使用 \(codec.title)、\(frameRate.title) 和\(background)。"
+        let background = preservesAlpha ? L10n.text("透明背景") : L10n.text("键盘日记 UI 背景")
+        return L10n.format(
+            "导出为 %@ %@，使用 %@、%@ 和%@。",
+            resolution.title,
+            container.title,
+            codec.title,
+            frameRate.title,
+            background
+        )
     }
 }
 
@@ -278,25 +285,25 @@ nonisolated enum PlaybackVideoExportError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noRecords:
-            "当前筛选范围内没有可录制的按键。"
+            L10n.text("当前筛选范围内没有可录制的按键。")
         case .noVideo:
-            "当前没有可导出的像素视频。"
+            L10n.text("当前没有可导出的像素视频。")
         case .cannotReadSource(let detail):
-            "无法读取原视频：\(detail)"
+            L10n.format("无法读取原视频：%@", detail)
         case .cannotCreateWriter(let detail):
-            "无法创建视频文件：\(detail)"
+            L10n.format("无法创建视频文件：%@", detail)
         case .cannotStartWriter(let detail):
-            "无法开始写入视频：\(detail)"
+            L10n.format("无法开始写入视频：%@", detail)
         case .cannotCreateFrame:
-            "无法渲染键盘视频画面。"
+            L10n.text("无法渲染键盘视频画面。")
         case .cannotAppendFrame(let detail):
-            "无法写入视频画面：\(detail)"
+            L10n.format("无法写入视频画面：%@", detail)
         case .cannotFinishWriter(let detail):
-            "无法完成视频文件：\(detail)"
+            L10n.format("无法完成视频文件：%@", detail)
         case .cannotCreateAudio(let detail):
-            "无法生成按键声音：\(detail)"
+            L10n.format("无法生成按键声音：%@", detail)
         case .cannotMuxAudio(let detail):
-            "无法将按键声音写入视频：\(detail)"
+            L10n.format("无法将按键声音写入视频：%@", detail)
         }
     }
 }
@@ -437,7 +444,7 @@ final class PlaybackVideoExporter {
             let audioAsset = AVURLAsset(url: audioURL)
             guard let sourceVideoTrack = try await videoAsset.loadTracks(withMediaType: .video).first,
                   let sourceAudioTrack = try await audioAsset.loadTracks(withMediaType: .audio).first else {
-                throw PlaybackVideoExportError.cannotMuxAudio("临时媒体轨道不可用。")
+                throw PlaybackVideoExportError.cannotMuxAudio(L10n.text("临时媒体轨道不可用。"))
             }
 
             let composition = AVMutableComposition()
@@ -448,7 +455,7 @@ final class PlaybackVideoExporter {
                 withMediaType: .audio,
                 preferredTrackID: kCMPersistentTrackID_Invalid
             ) else {
-                throw PlaybackVideoExportError.cannotMuxAudio("无法创建音视频合成轨道。")
+                throw PlaybackVideoExportError.cannotMuxAudio(L10n.text("无法创建音视频合成轨道。"))
             }
 
             let videoDuration = try await videoAsset.load(.duration)
@@ -477,7 +484,7 @@ final class PlaybackVideoExporter {
                 asset: composition,
                 presetName: AVAssetExportPresetPassthrough
             ) else {
-                throw PlaybackVideoExportError.cannotMuxAudio("无法创建音视频合成器。")
+                throw PlaybackVideoExportError.cannotMuxAudio(L10n.text("无法创建音视频合成器。"))
             }
             try await exportSession.export(to: outputURL, as: settings.container.fileType)
         } catch let error as PlaybackVideoExportError {
@@ -563,7 +570,9 @@ actor PlaybackVideoWriter {
         )
 
         guard writer.canAdd(input) else {
-            throw PlaybackVideoExportError.cannotCreateWriter("编码器不接受当前的封装、编码或分辨率组合。")
+            throw PlaybackVideoExportError.cannotCreateWriter(
+                L10n.text("编码器不接受当前的封装、编码或分辨率组合。")
+            )
         }
         writer.add(input)
         guard writer.startWriting() else {
@@ -577,7 +586,7 @@ actor PlaybackVideoWriter {
 
     func append(image: CGImage, at presentationTime: CMTime) async throws {
         guard let writer, let input, let adaptor else {
-            throw PlaybackVideoExportError.cannotStartWriter("视频编码器尚未启动。")
+            throw PlaybackVideoExportError.cannotStartWriter(L10n.text("视频编码器尚未启动。"))
         }
 
         while !input.isReadyForMoreMediaData {
@@ -605,7 +614,7 @@ actor PlaybackVideoWriter {
 
     func finish(at duration: TimeInterval) async throws {
         guard let writer, let input else {
-            throw PlaybackVideoExportError.cannotFinishWriter("视频编码器尚未启动。")
+            throw PlaybackVideoExportError.cannotFinishWriter(L10n.text("视频编码器尚未启动。"))
         }
 
         writer.endSession(atSourceTime: CMTime(seconds: duration, preferredTimescale: 120_000))
@@ -679,6 +688,6 @@ actor PlaybackVideoWriter {
     }
 
     private func errorDescription(for writer: AVAssetWriter) -> String {
-        writer.error?.localizedDescription ?? "未知编码错误。"
+        writer.error?.localizedDescription ?? L10n.text("未知编码错误。")
     }
 }

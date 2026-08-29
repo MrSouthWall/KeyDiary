@@ -74,7 +74,7 @@ struct PlaybackVideoFrame: View {
                     .foregroundStyle(themeColor)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("KEY DIARY")
+                    Text(L10n.text("KEY DIARY"))
                         .font(.system(size: 25, weight: .bold, design: .rounded))
                         .tracking(1.8)
                     Text("键盘回放")
@@ -95,7 +95,10 @@ struct PlaybackVideoFrame: View {
     private var footer: some View {
         VStack(spacing: 18) {
             HStack(alignment: .lastTextBaseline) {
-                Text(activeRecord.map { "当前按键  \($0.key)" } ?? "回放完成")
+                Text(
+                    activeRecord.map { L10n.format("当前按键  %@", $0.key) }
+                        ?? L10n.text("回放完成")
+                )
                     .font(.system(size: 27, weight: .semibold, design: .rounded))
                     .foregroundStyle(activeRecord == nil ? Color.secondary : themeColor)
 
@@ -124,7 +127,11 @@ struct PlaybackVideoFrame: View {
     }
 
     private var displayApplicationTitle: String {
-        applicationTitle == "All apps" ? "全部 App" : applicationTitle
+        switch applicationTitle {
+        case "All apps": L10n.text("全部 App")
+        case "Unknown app": L10n.text("Unknown app")
+        default: applicationTitle
+        }
     }
 
     private var speedTitle: String {

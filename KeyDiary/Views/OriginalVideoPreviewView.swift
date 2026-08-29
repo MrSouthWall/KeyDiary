@@ -25,7 +25,7 @@ struct OriginalVideoPreviewView: View {
                 Image(systemName: "film.fill")
                     .foregroundStyle(themeColor)
 
-                Text(player.videoTitle ?? "原片对照")
+                Text(player.videoTitle ?? L10n.text("原片对照"))
                     .font(.caption.weight(.semibold))
                     .lineLimit(1)
 

@@ -46,11 +46,11 @@ nonisolated enum KeyDiaryDatabaseError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .open(let message):
-            "无法打开本地数据库：\(message)"
+            L10n.format("无法打开本地数据库：%@", message)
         case .statement(let message):
-            "数据库操作失败：\(message)"
+            L10n.format("数据库操作失败：%@", message)
         case .invalidRecord:
-            "数据文件中包含无法写入的记录。"
+            L10n.text("数据文件中包含无法写入的记录。")
         }
     }
 }
@@ -633,7 +633,8 @@ nonisolated final class KeyDiaryDatabase: @unchecked Sendable {
     private func open(path: String) throws {
         let flags = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX
         guard sqlite3_open_v2(path, &connection, flags, nil) == SQLITE_OK else {
-            let message = connection.map { String(cString: sqlite3_errmsg($0)) } ?? "未知错误"
+            let message = connection.map { String(cString: sqlite3_errmsg($0)) }
+                ?? L10n.text("未知错误")
             if let connection {
                 sqlite3_close_v2(connection)
                 self.connection = nil
@@ -732,7 +733,7 @@ nonisolated final class KeyDiaryDatabase: @unchecked Sendable {
     }
 
     private var currentErrorMessage: String {
-        guard let connection else { return "数据库连接不可用" }
+        guard let connection else { return L10n.text("数据库连接不可用") }
         return String(cString: sqlite3_errmsg(connection))
     }
 

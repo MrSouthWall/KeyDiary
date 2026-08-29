@@ -204,23 +204,25 @@ struct KeyboardStage: View {
 
     private var accessibilityLabel: String {
         switch displayMode {
-        case .live: "实时 3D 键盘"
-        case .statistics: "3D 键盘统计热力图"
-        case .playback: "3D 键盘回放"
-        case .cinema: "键盘像素影院"
+        case .live: L10n.text("实时 3D 键盘")
+        case .statistics: L10n.text("3D 键盘统计热力图")
+        case .playback: L10n.text("3D 键盘回放")
+        case .cinema: L10n.text("键盘像素影院")
         }
     }
 
     private var accessibilityValue: String {
         switch displayMode {
         case .live:
-            activeKeyDescription.map { "当前按键 \($0)" } ?? "等待按键"
+            activeKeyDescription.map { L10n.format("当前按键 %@", $0) } ?? L10n.text("等待按键")
         case .statistics:
-            "\(layoutMode.accessibilityTitle)，峰值 \(maximumCount) 次"
+            L10n.format("%@，峰值 %lld 次", layoutMode.accessibilityTitle, Int64(maximumCount))
         case .playback:
-            isPlaying ? "正在回放 \(activeKeyDescription ?? "")" : "回放已停止"
+            isPlaying
+                ? L10n.format("正在回放 %@", activeKeyDescription ?? "")
+                : L10n.text("回放已停止")
         case .cinema:
-            isPlaying ? "正在播放键帽像素视频" : "像素视频已暂停"
+            isPlaying ? L10n.text("正在播放键帽像素视频") : L10n.text("像素视频已暂停")
         }
     }
 }
@@ -420,9 +422,13 @@ private struct ArrowKeyHalfButton: View {
             KeyFace(key: key, count: count, isCompact: true)
         }
         .buttonStyle(ArrowKeyHalfStyle(isActive: isActive, heat: heat, pixelColor: pixelColor))
-        .help(count == 0 ? key.accessibilityName : "\(key.accessibilityName)：\(count) 次")
+        .help(
+            count == 0
+                ? key.accessibilityName
+                : L10n.format("%@：%lld 次", key.accessibilityName, Int64(count))
+        )
         .accessibilityLabel(key.accessibilityName)
-        .accessibilityValue("\(count) 次")
+        .accessibilityValue(L10n.format("%lld 次", Int64(count)))
     }
 
     private var heat: Double {
@@ -528,9 +534,13 @@ private struct KeyboardKeyButton: View {
                 pixelColor: pixelColor
             )
         )
-        .help(count == 0 ? key.accessibilityName : "\(key.accessibilityName)：\(count) 次")
+        .help(
+            count == 0
+                ? key.accessibilityName
+                : L10n.format("%@：%lld 次", key.accessibilityName, Int64(count))
+        )
         .accessibilityLabel(key.accessibilityName)
-        .accessibilityValue("\(count) 次")
+        .accessibilityValue(L10n.format("%lld 次", Int64(count)))
     }
 
     private var heat: Double {
@@ -1039,7 +1049,7 @@ private enum KeyboardLayout {
             .init("backslash", code: 42, "|", secondary: "\\", face: .symbolPair, width: 1.05)
         ],
         [
-            .init("caps", code: 57, "•", secondary: "中/英", face: .cornerText(primary: .topLeading, secondary: .bottomLeading), width: 1.8),
+            .init("caps", code: 57, "•", secondary: L10n.text("中/英"), face: .cornerText(primary: .topLeading, secondary: .bottomLeading), width: 1.8),
             .init("a", code: 0, "A"), .init("s", code: 1, "S"), .init("d", code: 2, "D"),
             .init("f", code: 3, "F"), .init("g", code: 5, "G"), .init("h", code: 4, "H"),
             .init("j", code: 38, "J"), .init("k", code: 40, "K"), .init("l", code: 37, "L"),
