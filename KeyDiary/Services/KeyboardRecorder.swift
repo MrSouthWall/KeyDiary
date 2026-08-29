@@ -11,18 +11,21 @@ final class KeyboardRecorder {
     private let keySoundPlayer = KeySoundPlayer()
     private var pressedKeys: [UInt16: String] = [:]
     private var pressedModifierKeyCodes: Set<UInt16> = []
+    private var recordsKeyPresses = false
+    private(set) var isCapsLockEnabled = CGEventSource.flagsState(.combinedSessionState).contains(.maskAlphaShift)
     private lazy var quartzKeyboardMonitor = QuartzKeyboardMonitor(
         onEvent: { [weak self] event in
-            self?.handle(event)
+            self?.handleMonitoredEvent(event)
         },
         onReset: { [weak self] in
-            self?.clearPressedKeys()
+            self?.resetTransientState()
         }
     )
     var onKeyPress: ((KeyPressRecord) -> Void)?
     var onPressedKeysChanged: (([UInt16: String]) -> Void)?
+    var onCapsLockStateChanged: ((Bool) -> Void)?
 
-    var isRunning: Bool { quartzKeyboardMonitor.isRunning }
+    var isRunning: Bool { recordsKeyPresses && quartzKeyboardMonitor.isRunning }
 
     @discardableResult
     func requestInputMonitoringPermission() -> Bool {
@@ -42,13 +45,40 @@ final class KeyboardRecorder {
     }
 
     func start() {
-        guard hasInputMonitoringPermission() else { return }
-        quartzKeyboardMonitor.start()
+        refreshCapsLockState()
+        guard hasInputMonitoringPermission() else {
+            recordsKeyPresses = false
+            return
+        }
+        recordsKeyPresses = true
+        if !quartzKeyboardMonitor.start() {
+            recordsKeyPresses = false
+        }
+    }
+
+    /// Pauses diary recording while keeping the passive modifier-state monitor alive.
+    func pause() {
+        recordsKeyPresses = false
+        clearPressedKeys()
+        refreshCapsLockState()
     }
 
     func stop() {
+        recordsKeyPresses = false
         quartzKeyboardMonitor.stop()
         clearPressedKeys()
+        refreshCapsLockState()
+    }
+
+    func refreshCapsLockState() {
+        updateCapsLockState(
+            CGEventSource.flagsState(.combinedSessionState).contains(.maskAlphaShift)
+        )
+    }
+
+    private func resetTransientState() {
+        clearPressedKeys()
+        refreshCapsLockState()
     }
 
     private func clearPressedKeys() {
@@ -57,6 +87,16 @@ final class KeyboardRecorder {
             pressedKeys.removeAll()
             onPressedKeysChanged?([:])
         }
+    }
+
+    private func handleMonitoredEvent(_ event: NSEvent) {
+        guard recordsKeyPresses else {
+            if event.type == .flagsChanged {
+                updateCapsLockState(event.modifierFlags.contains(.capsLock))
+            }
+            return
+        }
+        handle(event)
     }
 
     func handle(_ event: NSEvent) {
@@ -77,6 +117,7 @@ final class KeyboardRecorder {
             setPressed(false, keyCode: event.keyCode)
 
         case .flagsChanged:
+            updateCapsLockState(event.modifierFlags.contains(.capsLock))
             handleModifierFlagsChanged(event)
 
         case .systemDefined:
@@ -141,6 +182,12 @@ final class KeyboardRecorder {
             guard pressedKeys.removeValue(forKey: keyCode) != nil else { return }
         }
         onPressedKeysChanged?(pressedKeys)
+    }
+
+    private func updateCapsLockState(_ isEnabled: Bool) {
+        guard isCapsLockEnabled != isEnabled else { return }
+        isCapsLockEnabled = isEnabled
+        onCapsLockStateChanged?(isEnabled)
     }
 
     func previewKeySound(style: KeySoundStyle, volume: Double) {

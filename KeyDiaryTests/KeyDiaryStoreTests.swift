@@ -750,6 +750,25 @@ final class KeyDiaryStoreTests: XCTestCase {
         XCTAssertTrue(pressedKeys.isEmpty)
     }
 
+    func testRecorderPublishesCapsLockStateFromModifierFlags() throws {
+        let recorder = KeyboardRecorder()
+        let expectedState = !recorder.isCapsLockEnabled
+        var observedState: Bool?
+        recorder.onCapsLockStateChanged = { observedState = $0 }
+
+        recorder.handle(
+            try makeKeyEvent(
+                type: .flagsChanged,
+                keyCode: 57,
+                characters: "",
+                modifierFlags: expectedState ? [.capsLock] : []
+            )
+        )
+
+        XCTAssertEqual(recorder.isCapsLockEnabled, expectedState)
+        XCTAssertEqual(observedState, expectedState)
+    }
+
     private func makeDatabase() throws -> KeyDiaryDatabase {
         let folder = try makeTemporaryFolder()
         return try KeyDiaryDatabase(databaseURL: folder.appendingPathComponent("key-diary.sqlite"))
@@ -849,12 +868,13 @@ final class KeyDiaryStoreTests: XCTestCase {
         type: NSEvent.EventType,
         keyCode: UInt16,
         characters: String,
+        modifierFlags: NSEvent.ModifierFlags = [],
         isARepeat: Bool = false
     ) throws -> NSEvent {
         try XCTUnwrap(NSEvent.keyEvent(
             with: type,
             location: .zero,
-            modifierFlags: [],
+            modifierFlags: modifierFlags,
             timestamp: 0,
             windowNumber: 0,
             context: nil,

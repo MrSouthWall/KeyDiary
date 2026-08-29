@@ -28,6 +28,7 @@ struct ContentView: View {
             KeyboardStage(
                 activeKeyDescription: activeKeyDescription,
                 activeKeyCodes: activeKeyCodes,
+                isCapsLockEnabled: store.isCapsLockEnabled,
                 displayMode: displayMode,
                 layoutMode: displayMode == .statistics ? statisticsKeyboardLayout : .qwerty,
                 isPlaying: stageIsPlaying,

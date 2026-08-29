@@ -13,6 +13,10 @@ private struct KeyboardPixelColorModeKey: EnvironmentKey {
     static let defaultValue: KeyboardPixelColorMode? = nil
 }
 
+private struct KeyboardCapsLockEnabledKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 private extension EnvironmentValues {
     var keyboardRenderScale: CGFloat {
         get { self[KeyboardRenderScaleKey.self] }
@@ -22,6 +26,11 @@ private extension EnvironmentValues {
     var keyboardPixelColorMode: KeyboardPixelColorMode? {
         get { self[KeyboardPixelColorModeKey.self] }
         set { self[KeyboardPixelColorModeKey.self] = newValue }
+    }
+
+    var keyboardCapsLockEnabled: Bool {
+        get { self[KeyboardCapsLockEnabledKey.self] }
+        set { self[KeyboardCapsLockEnabledKey.self] = newValue }
     }
 }
 
@@ -152,6 +161,7 @@ private func keyboardHeatOverlayOpacity(_ heat: Double) -> Double {
 struct KeyboardStage: View {
     let activeKeyDescription: String?
     let activeKeyCodes: Set<UInt16>
+    let isCapsLockEnabled: Bool
     let displayMode: KeyboardDisplayMode
     let layoutMode: KeyboardLayoutMode
     let isPlaying: Bool
@@ -180,6 +190,7 @@ struct KeyboardStage: View {
             )
             .environment(\.keyboardRenderScale, scale)
             .environment(\.keyboardPixelColorMode, pixelColorMode)
+            .environment(\.keyboardCapsLockEnabled, isCapsLockEnabled)
             .frame(width: modelWidth, height: modelHeight)
             .rotation3DEffect(.degrees(rotation.height), axis: (x: 1, y: 0, z: 0), perspective: 0.42)
             .rotation3DEffect(.degrees(rotation.width), axis: (x: 0, y: 1, z: 0), perspective: 0.32)
@@ -554,6 +565,7 @@ private struct KeyFace: View {
     let count: Int
     let isCompact: Bool
     @Environment(\.keyboardRenderScale) private var renderScale
+    @Environment(\.keyboardCapsLockEnabled) private var isCapsLockEnabled
     @Environment(\.keyDiaryAccentColor) private var themeColor
 
     init(key: KeyboardKey, count: Int, isCompact: Bool = false) {
@@ -660,7 +672,7 @@ private struct KeyFace: View {
             )
 
         case .symbol(let corner):
-            symbol(size: (isCompact ? 9.5 : (key.isFunction ? 11.5 : 14)) * renderScale)
+            symbol(size: standaloneSymbolSize * renderScale)
                 .frame(
                     width: (isCompact ? 12 : 20) * renderScale,
                     height: (isCompact ? 12 : 20) * renderScale
@@ -714,6 +726,7 @@ private struct KeyFace: View {
     @ViewBuilder
     private var capsLockFace: some View {
         Circle()
+            .fill(isCapsLockEnabled ? Color.green : Color.primary.opacity(0.64))
             .frame(
                 width: KeyboardMetrics.capsIndicatorDiameter * renderScale,
                 height: KeyboardMetrics.capsIndicatorDiameter * renderScale
@@ -721,7 +734,12 @@ private struct KeyFace: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(capsIndicatorInsets)
 
-        if let secondary = key.secondary {
+        if key.symbolName != nil {
+            symbol(size: cornerSecondaryFontSize * renderScale)
+                .frame(height: 13 * renderScale)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .padding(capsLabelInsets)
+        } else if let secondary = key.secondary {
             Text(secondary)
                 .font(.system(size: cornerSecondaryFontSize * renderScale, weight: .regular, design: .default))
                 .lineLimit(1)
@@ -747,6 +765,12 @@ private struct KeyFace: View {
             bottom: (isCompact ? 1 : 7) * renderScale,
             trailing: (isCompact ? 3 : 9) * renderScale
         )
+    }
+
+    private var standaloneSymbolSize: CGFloat {
+        if isCompact { return 9.5 }
+        if key.id == "lock" { return 15 }
+        return key.isFunction ? 11.5 : 14
     }
 
     private var capsIndicatorInsets: EdgeInsets {
@@ -1005,6 +1029,14 @@ private enum KeyboardLayout {
     // Visual-only sentinel. No recorder maps an event to this key code.
     private static let displayOnlyLockKeyCode = UInt16.max
 
+    private static var capsKey: KeyboardKey {
+        if L10n.usesEnglishInterface {
+            return .init("caps", code: 57, "Caps Lock", symbol: "capslock", face: .cornerText(primary: .topLeading, secondary: .bottomLeading), width: 1.8)
+        }
+
+        return .init("caps", code: 57, "•", secondary: L10n.text("中/英"), face: .cornerText(primary: .topLeading, secondary: .bottomLeading), width: 1.8)
+    }
+
     private static let qwertyRows: [[KeyboardKey]] = [
         [
             .init("esc", code: 53, "esc", face: .cornerText(primary: .bottomLeading, secondary: .bottomLeading), width: 1.55, function: true, exteriorCorner: .topLeading),
@@ -1020,7 +1052,7 @@ private enum KeyboardLayout {
             .init("f10", code: 109, secondary: "F10", symbol: "speaker.slash", face: .function, function: true),
             .init("f11", code: 103, secondary: "F11", symbol: "speaker.wave.1", face: .function, function: true),
             .init("f12", code: 111, secondary: "F12", symbol: "speaker.wave.3", face: .function, function: true),
-            .init("lock", code: displayOnlyLockKeyCode, symbol: "eject", face: .symbol(.center), width: 1.02, function: true, exteriorCorner: .topTrailing)
+            .init("lock", code: displayOnlyLockKeyCode, symbol: "lock", face: .symbol(.center), width: 1.02, function: true, exteriorCorner: .topTrailing)
         ],
         [
             .init("grave", code: 50, "~", secondary: "`", face: .symbolPair),
@@ -1049,7 +1081,7 @@ private enum KeyboardLayout {
             .init("backslash", code: 42, "|", secondary: "\\", face: .symbolPair, width: 1.05)
         ],
         [
-            .init("caps", code: 57, "•", secondary: L10n.text("中/英"), face: .cornerText(primary: .topLeading, secondary: .bottomLeading), width: 1.8),
+            capsKey,
             .init("a", code: 0, "A"), .init("s", code: 1, "S"), .init("d", code: 2, "D"),
             .init("f", code: 3, "F"), .init("g", code: 5, "G"), .init("h", code: 4, "H"),
             .init("j", code: 38, "J"), .init("k", code: 40, "K"), .init("l", code: 37, "L"),

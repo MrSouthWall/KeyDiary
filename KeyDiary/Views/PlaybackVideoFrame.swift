@@ -23,6 +23,7 @@ struct PlaybackVideoFrame: View {
             KeyboardStage(
                 activeKeyDescription: activeRecord?.key,
                 activeKeyCodes: activeRecord.map { Set([$0.keyCode]) } ?? [],
+                isCapsLockEnabled: false,
                 displayMode: .playback,
                 layoutMode: .qwerty,
                 isPlaying: activeRecord != nil,

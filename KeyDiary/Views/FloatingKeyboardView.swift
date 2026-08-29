@@ -26,6 +26,7 @@ struct FloatingKeyboardView: View {
             KeyboardStage(
                 activeKeyDescription: store.activeLiveKeySummary,
                 activeKeyCodes: store.activeLiveKeyCodes,
+                isCapsLockEnabled: store.isCapsLockEnabled,
                 displayMode: .live,
                 layoutMode: .qwerty,
                 isPlaying: false,

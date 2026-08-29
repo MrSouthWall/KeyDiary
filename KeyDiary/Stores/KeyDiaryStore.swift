@@ -48,6 +48,7 @@ final class KeyDiaryStore {
     private(set) var isRecording = false
     private(set) var hasInputMonitoringPermission = false
     private(set) var activeLiveKeys: [UInt16: String] = [:]
+    private(set) var isCapsLockEnabled = false
     private(set) var isPlaying = false
     private(set) var activePlaybackKey: String?
     private(set) var activePlaybackKeyCode: UInt16?
@@ -164,6 +165,12 @@ final class KeyDiaryStore {
                 self?.activeLiveKeys = pressedKeys
             }
         }
+        isCapsLockEnabled = recorder.isCapsLockEnabled
+        recorder.onCapsLockStateChanged = { [weak self] isEnabled in
+            withAnimation(.easeInOut(duration: 0.12)) {
+                self?.isCapsLockEnabled = isEnabled
+            }
+        }
 
         rebuildDerivedState(now: now)
         scheduleDayRollover(from: now)
@@ -197,13 +204,14 @@ final class KeyDiaryStore {
     }
 
     func resumeAutomaticRecordingIfPossible() {
+        recorder.refreshCapsLockState()
         refreshInputMonitoringStatus()
         if wantsRecording { startRecorderIfPossible() }
     }
 
     func stopRecording() {
         wantsRecording = false
-        stopRecorderAndFlush()
+        pauseRecorderAndFlush()
     }
 
     func previewKeySound(styleRawValue: String, volume: Double) {
@@ -550,6 +558,12 @@ final class KeyDiaryStore {
 
     private func stopRecorderAndFlush() {
         recorder.stop()
+        isRecording = false
+        flushPersistence()
+    }
+
+    private func pauseRecorderAndFlush() {
+        recorder.pause()
         isRecording = false
         flushPersistence()
     }
