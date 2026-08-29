@@ -38,7 +38,7 @@ private final class DataEditorViewModel {
     let pageSize = 250
     let store: KeyDiaryStore
 
-    var rangePreset: DataEditorRangePreset = .recent7Days
+    var rangePreset: DataEditorRangePreset = .today
     var customFromDate: Date
     var customToDate: Date
     var selectedApplication: String?

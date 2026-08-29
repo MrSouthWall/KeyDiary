@@ -188,6 +188,31 @@ final class KeyDiaryStoreTests: XCTestCase {
         )
     }
 
+    func testDefaultDateRangeIsToday() throws {
+        let calendar = Calendar.current
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(
+            year: 2026,
+            month: 8,
+            day: 26,
+            hour: 12
+        )))
+        let yesterday = try XCTUnwrap(calendar.date(byAdding: .day, value: -1, to: now))
+        let database = try makeDatabase()
+        _ = try database.insert([
+            makeRecord(at: yesterday, keyCode: 0, key: "A"),
+            makeRecord(at: now, keyCode: 1, key: "S")
+        ])
+
+        let store = KeyDiaryStore(database: database, now: now)
+
+        XCTAssertEqual(store.selectedDateRangeSelection, .recentDays(1))
+        XCTAssertEqual(store.selectedDateRangeTitle, "今天")
+        XCTAssertEqual(store.fromDate, calendar.startOfDay(for: now))
+        XCTAssertEqual(store.toDate, endOfDay(now, calendar: calendar))
+        XCTAssertEqual(store.filteredRecordCount, 1)
+        XCTAssertEqual(store.filteredKeyCounts, [1: 1])
+    }
+
     func testCustomRangeDoesNotMoveAtMidnight() throws {
         let calendar = Calendar.current
         let start = try XCTUnwrap(calendar.date(from: DateComponents(
@@ -233,7 +258,7 @@ final class KeyDiaryStoreTests: XCTestCase {
         ])
         let store = KeyDiaryStore(database: database, now: now.addingTimeInterval(4))
 
-        XCTAssertEqual(store.selectedDateRangeTitle, "近 7 天")
+        XCTAssertEqual(store.selectedDateRangeTitle, "今天")
         XCTAssertEqual(store.estimatedPlaybackDuration, 1.54, accuracy: 0.001)
         XCTAssertEqual(store.estimatedPlaybackDurationTitle, "2 秒")
 

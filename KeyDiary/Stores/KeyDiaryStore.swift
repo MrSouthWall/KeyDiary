@@ -35,7 +35,7 @@ final class KeyDiaryStore {
     private var saveTask: Task<Void, Never>?
     private var dayRolloverTask: Task<Void, Never>?
     private var pendingRecords: [KeyPressRecord] = []
-    private var rangeSelection: DateRangeSelection = .recentDays(7)
+    private var rangeSelection: DateRangeSelection = .recentDays(1)
     private var currentDayStart: Date
     private var lastFilteredTimestamp: Date?
     private var wantsRecording = true
@@ -153,7 +153,7 @@ final class KeyDiaryStore {
         let calendar = Calendar.current
         let dayStart = calendar.startOfDay(for: now)
         currentDayStart = dayStart
-        fromDate = calendar.date(byAdding: .day, value: -6, to: dayStart) ?? dayStart
+        fromDate = dayStart
         toDate = Self.endOfDay(containing: now, calendar: calendar)
 
         recorder.onKeyPress = { [weak self] record in
