@@ -38,7 +38,7 @@ final class LaunchAtLoginController {
         defaults.set(true, forKey: Self.automaticRegistrationAttemptedKey)
         refresh()
 
-        guard status == .notRegistered else { return }
+        guard Self.canAttemptRegistration(from: status) else { return }
         updateRegistration(shouldEnable: true)
     }
 
@@ -69,7 +69,7 @@ final class LaunchAtLoginController {
 
         do {
             if shouldEnable {
-                guard status == .notRegistered else { return }
+                guard Self.canAttemptRegistration(from: status) else { return }
                 try service.register()
             } else {
                 guard status == .enabled || status == .requiresApproval else { return }
@@ -80,5 +80,11 @@ final class LaunchAtLoginController {
         }
 
         refresh()
+    }
+
+    static func canAttemptRegistration(from status: SMAppService.Status) -> Bool {
+        // macOS 26 can report `notFound` before the main app has its first
+        // Background Task Management record. Registering creates that record.
+        status == .notRegistered || status == .notFound
     }
 }

@@ -750,23 +750,82 @@ final class KeyDiaryStoreTests: XCTestCase {
         XCTAssertTrue(pressedKeys.isEmpty)
     }
 
-    func testRecorderPublishesCapsLockStateFromModifierFlags() throws {
+    func testCapsLockRecordsOncePerStateChangeWithoutAnotherKey() async throws {
         let recorder = KeyboardRecorder()
-        let expectedState = !recorder.isCapsLockEnabled
-        var observedState: Bool?
-        recorder.onCapsLockStateChanged = { observedState = $0 }
+        let released = expectation(description: "Caps Lock feedback is released")
+        var pressedKeys: [UInt16: String] = [:]
+        var recordedPressCount = 0
+        var observedCapsLockStates: [Bool] = []
+        recorder.onPressedKeysChanged = {
+            pressedKeys = $0
+            if $0.isEmpty {
+                released.fulfill()
+            }
+        }
+        recorder.onKeyPress = { _ in recordedPressCount += 1 }
+        recorder.onCapsLockStateChanged = { observedCapsLockStates.append($0) }
+
+        let firstState = !recorder.isCapsLockEnabled
+        let firstStateFlags: NSEvent.ModifierFlags = firstState ? [.capsLock] : []
+        let secondState = !firstState
+        let secondStateFlags: NSEvent.ModifierFlags = secondState ? [.capsLock] : []
 
         recorder.handle(
             try makeKeyEvent(
                 type: .flagsChanged,
                 keyCode: 57,
                 characters: "",
-                modifierFlags: expectedState ? [.capsLock] : []
+                modifierFlags: firstStateFlags
             )
         )
+        XCTAssertEqual(pressedKeys, [57: "Caps"])
+        XCTAssertEqual(recordedPressCount, 1)
+        XCTAssertEqual(recorder.isCapsLockEnabled, firstState)
+        XCTAssertEqual(observedCapsLockStates, [firstState])
 
-        XCTAssertEqual(recorder.isCapsLockEnabled, expectedState)
-        XCTAssertEqual(observedState, expectedState)
+        // A physical release can arrive as a second flagsChanged with the same
+        // Caps Lock state. It must not create another diary entry.
+        recorder.handle(
+            try makeKeyEvent(
+                type: .flagsChanged,
+                keyCode: 57,
+                characters: "",
+                modifierFlags: firstStateFlags
+            )
+        )
+        XCTAssertEqual(pressedKeys, [57: "Caps"])
+        XCTAssertEqual(recordedPressCount, 1)
+        XCTAssertEqual(recorder.isCapsLockEnabled, firstState)
+        XCTAssertEqual(observedCapsLockStates, [firstState])
+
+        recorder.handle(
+            try makeKeyEvent(
+                type: .flagsChanged,
+                keyCode: 57,
+                characters: "",
+                modifierFlags: secondStateFlags
+            )
+        )
+        XCTAssertEqual(pressedKeys, [57: "Caps"])
+        XCTAssertEqual(recordedPressCount, 2)
+        XCTAssertEqual(recorder.isCapsLockEnabled, secondState)
+        XCTAssertEqual(observedCapsLockStates, [firstState, secondState])
+
+        recorder.handle(
+            try makeKeyEvent(
+                type: .flagsChanged,
+                keyCode: 57,
+                characters: "",
+                modifierFlags: secondStateFlags
+            )
+        )
+        XCTAssertEqual(pressedKeys, [57: "Caps"])
+        XCTAssertEqual(recordedPressCount, 2)
+        XCTAssertEqual(recorder.isCapsLockEnabled, secondState)
+        XCTAssertEqual(observedCapsLockStates, [firstState, secondState])
+
+        await fulfillment(of: [released], timeout: 1)
+        XCTAssertTrue(pressedKeys.isEmpty)
     }
 
     private func makeDatabase() throws -> KeyDiaryDatabase {

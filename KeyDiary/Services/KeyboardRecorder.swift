@@ -8,9 +8,13 @@ import ApplicationServices
 
 @MainActor
 final class KeyboardRecorder {
+    private static let capsLockKeyCode: UInt16 = 57
+    private static let capsLockFeedbackDuration = Duration.milliseconds(120)
+
     private let keySoundPlayer = KeySoundPlayer()
     private var pressedKeys: [UInt16: String] = [:]
     private var pressedModifierKeyCodes: Set<UInt16> = []
+    private var capsLockFeedbackTask: Task<Void, Never>?
     private var recordsKeyPresses = false
     private(set) var isCapsLockEnabled = CGEventSource.flagsState(.combinedSessionState).contains(.maskAlphaShift)
     private lazy var quartzKeyboardMonitor = QuartzKeyboardMonitor(
@@ -82,6 +86,8 @@ final class KeyboardRecorder {
     }
 
     private func clearPressedKeys() {
+        capsLockFeedbackTask?.cancel()
+        capsLockFeedbackTask = nil
         pressedModifierKeyCodes.removeAll()
         if !pressedKeys.isEmpty {
             pressedKeys.removeAll()
@@ -102,22 +108,29 @@ final class KeyboardRecorder {
     func handle(_ event: NSEvent) {
         switch event.type {
         case .keyDown:
-            // Caps Lock is normalized through flagsChanged below. Ignoring a possible
-            // keyDown here prevents a keyboard driver from reporting the same press twice.
-            guard event.keyCode != 57 else { return }
+            guard event.keyCode != Self.capsLockKeyCode else { return }
             let key = KeyCodeResolver.label(for: event)
             setPressed(true, keyCode: event.keyCode, key: key)
             record(keyCode: event.keyCode, key: key, playsSound: !event.isARepeat)
 
         case .keyUp:
-            guard event.keyCode != 57 else { return }
+            guard event.keyCode != Self.capsLockKeyCode else { return }
             if pressedKeys[event.keyCode] != nil {
                 keySoundPlayer.playReleaseUsingPreferences(keyCode: event.keyCode)
             }
             setPressed(false, keyCode: event.keyCode)
 
         case .flagsChanged:
-            updateCapsLockState(event.modifierFlags.contains(.capsLock))
+            let capsLockIsEnabled = event.modifierFlags.contains(.capsLock)
+            if event.keyCode == Self.capsLockKeyCode {
+                // Some keyboards emit flagsChanged for both physical transitions.
+                // The lock state changes only once, so ignore the same-state partner.
+                guard isCapsLockEnabled != capsLockIsEnabled else { return }
+                updateCapsLockState(capsLockIsEnabled)
+                handleCapsLockPress()
+                return
+            }
+            updateCapsLockState(capsLockIsEnabled)
             handleModifierFlagsChanged(event)
 
         case .systemDefined:
@@ -140,23 +153,26 @@ final class KeyboardRecorder {
         }
     }
 
+    private func handleCapsLockPress() {
+        capsLockFeedbackTask?.cancel()
+
+        let key = "Caps"
+        setPressed(true, keyCode: Self.capsLockKeyCode, key: key)
+        record(keyCode: Self.capsLockKeyCode, key: key)
+
+        capsLockFeedbackTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.capsLockFeedbackDuration)
+            guard !Task.isCancelled, let self else { return }
+
+            self.capsLockFeedbackTask = nil
+            guard self.pressedKeys[Self.capsLockKeyCode] != nil else { return }
+            self.keySoundPlayer.playReleaseUsingPreferences(keyCode: Self.capsLockKeyCode)
+            self.setPressed(false, keyCode: Self.capsLockKeyCode)
+        }
+    }
+
     private func handleModifierFlagsChanged(_ event: NSEvent) {
         let keyCode = event.keyCode
-
-        // Caps Lock sends flagsChanged for both the physical down and up transitions.
-        // Toggle its tracked state and record only the down transition.
-        if keyCode == 57 {
-            if pressedModifierKeyCodes.remove(keyCode) != nil {
-                keySoundPlayer.playReleaseUsingPreferences(keyCode: keyCode)
-                setPressed(false, keyCode: keyCode)
-                return
-            }
-            pressedModifierKeyCodes.insert(keyCode)
-            let key = KeyCodeResolver.label(for: event)
-            setPressed(true, keyCode: keyCode, key: key)
-            record(keyCode: keyCode, key: key)
-            return
-        }
 
         guard let flag = KeyCodeResolver.modifierFlag(for: keyCode) else { return }
 
