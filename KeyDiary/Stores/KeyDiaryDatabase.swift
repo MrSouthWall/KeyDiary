@@ -124,23 +124,47 @@ nonisolated final class KeyDiaryDatabase: @unchecked Sendable {
         }
     }
 
-    func insertAsync(
-        _ records: [KeyPressRecord],
-        completion: @escaping @Sendable (Result<DataImportResult, Error>) -> Void
+    func insert(_ records: [MouseClickRecord]) throws {
+        guard !records.isEmpty else { return }
+        try queue.sync {
+            try withTransaction {
+                try insertMouseClickRecords(records)
+            }
+        }
+    }
+
+    func insertInputsAsync(
+        keyPresses: [KeyPressRecord],
+        mouseClicks: [MouseClickRecord],
+        completion: @escaping @Sendable (Result<Void, Error>) -> Void
     ) {
-        guard !records.isEmpty else {
-            completion(.success(DataImportResult(inserted: 0, duplicates: 0, total: 0)))
+        guard !keyPresses.isEmpty || !mouseClicks.isEmpty else {
+            completion(.success(()))
             return
         }
 
         queue.async { [self] in
             do {
-                let result = try withTransaction {
-                    try insertRecords(records)
+                try withTransaction {
+                    _ = try insertRecords(keyPresses)
+                    try insertMouseClickRecords(mouseClicks)
                 }
-                completion(.success(result))
+                completion(.success(()))
             } catch {
                 completion(.failure(error))
+            }
+        }
+    }
+
+    func insertInputs(
+        keyPresses: [KeyPressRecord],
+        mouseClicks: [MouseClickRecord]
+    ) throws {
+        guard !keyPresses.isEmpty || !mouseClicks.isEmpty else { return }
+        try queue.sync {
+            try withTransaction {
+                _ = try insertRecords(keyPresses)
+                try insertMouseClickRecords(mouseClicks)
             }
         }
     }
@@ -183,6 +207,7 @@ nonisolated final class KeyDiaryDatabase: @unchecked Sendable {
         try queue.sync {
             try withTransaction {
                 try execute("DELETE FROM key_press_records;")
+                try execute("DELETE FROM mouse_click_records;")
             }
         }
     }
@@ -231,9 +256,28 @@ nonisolated final class KeyDiaryDatabase: @unchecked Sendable {
         }
     }
 
+    func mouseClickCount(query: KeyDiaryRecordQuery = .all) throws -> Int {
+        try queue.sync {
+            let clause = whereClause(for: query)
+            let statement = try prepare("SELECT COUNT(*) FROM mouse_click_records\(clause.sql);")
+            defer { sqlite3_finalize(statement) }
+            try bind(clause.bindings, to: statement)
+            guard sqlite3_step(statement) == SQLITE_ROW else { throw statementError() }
+            return Int(sqlite3_column_int64(statement, 0))
+        }
+    }
+
     func earliestTimestamp() throws -> Date? {
         try queue.sync {
-            let statement = try prepare("SELECT MIN(timestamp_ms) FROM key_press_records;")
+            let statement = try prepare(
+                """
+                SELECT MIN(timestamp_ms) FROM (
+                    SELECT timestamp_ms FROM key_press_records
+                    UNION ALL
+                    SELECT timestamp_ms FROM mouse_click_records
+                );
+                """
+            )
             defer { sqlite3_finalize(statement) }
             guard sqlite3_step(statement) == SQLITE_ROW else { throw statementError() }
             guard sqlite3_column_type(statement, 0) != SQLITE_NULL else { return nil }
@@ -244,8 +288,13 @@ nonisolated final class KeyDiaryDatabase: @unchecked Sendable {
     func applicationNames() throws -> [String] {
         try queue.sync {
             let statement = try prepare(
-                "SELECT DISTINCT application_name FROM key_press_records " +
-                "ORDER BY application_name COLLATE NOCASE;"
+                """
+                SELECT DISTINCT application_name FROM (
+                    SELECT application_name FROM key_press_records
+                    UNION ALL
+                    SELECT application_name FROM mouse_click_records
+                ) ORDER BY application_name COLLATE NOCASE;
+                """
             )
             defer { sqlite3_finalize(statement) }
 
@@ -270,6 +319,26 @@ nonisolated final class KeyDiaryDatabase: @unchecked Sendable {
             while sqlite3_step(statement) == SQLITE_ROW {
                 let keyCode = UInt16(clamping: sqlite3_column_int(statement, 0))
                 counts[keyCode] = Int(sqlite3_column_int64(statement, 1))
+            }
+            return counts
+        }
+    }
+
+    func mouseClickCounts(query: KeyDiaryRecordQuery) throws -> MouseClickCounts {
+        try queue.sync {
+            let clause = whereClause(for: query)
+            let statement = try prepare(
+                "SELECT button, COUNT(*) FROM mouse_click_records\(clause.sql) GROUP BY button;"
+            )
+            defer { sqlite3_finalize(statement) }
+            try bind(clause.bindings, to: statement)
+
+            var counts = MouseClickCounts()
+            while sqlite3_step(statement) == SQLITE_ROW {
+                guard let button = MouseButton(rawValue: Int(sqlite3_column_int(statement, 0))) else {
+                    continue
+                }
+                counts[button] = Int(sqlite3_column_int64(statement, 1))
             }
             return counts
         }
@@ -417,6 +486,12 @@ nonisolated final class KeyDiaryDatabase: @unchecked Sendable {
         INSERT OR IGNORE INTO key_press_records
         (id, timestamp_ms, key_code, key, application_name, bundle_identifier)
         VALUES (?, ?, ?, ?, ?, ?);
+        """
+
+    private static let insertMouseClickSQL = """
+        INSERT OR IGNORE INTO mouse_click_records
+        (id, timestamp_ms, button, application_name, bundle_identifier)
+        VALUES (?, ?, ?, ?, ?);
         """
 
     private enum Binding {
@@ -572,6 +647,19 @@ nonisolated final class KeyDiaryDatabase: @unchecked Sendable {
         )
     }
 
+    private func insertMouseClickRecords(_ records: [MouseClickRecord]) throws {
+        guard !records.isEmpty else { return }
+        let statement = try prepare(Self.insertMouseClickSQL)
+        defer { sqlite3_finalize(statement) }
+
+        for record in records {
+            try bind(record, to: statement)
+            guard sqlite3_step(statement) == SQLITE_DONE else { throw statementError() }
+            sqlite3_reset(statement)
+            sqlite3_clear_bindings(statement)
+        }
+    }
+
     private func bind(_ record: KeyPressRecord, to statement: OpaquePointer?) throws {
         let id = record.id.uuidString.lowercased()
         guard
@@ -590,6 +678,31 @@ nonisolated final class KeyDiaryDatabase: @unchecked Sendable {
             }
         } else {
             sqlite3_bind_null(statement, 6)
+        }
+    }
+
+    private func bind(_ record: MouseClickRecord, to statement: OpaquePointer?) throws {
+        guard
+            sqlite3_bind_text(
+                statement,
+                1,
+                record.id.uuidString.lowercased(),
+                -1,
+                Self.transient
+            ) == SQLITE_OK,
+            sqlite3_bind_int64(statement, 2, Self.milliseconds(from: record.timestamp)) == SQLITE_OK,
+            sqlite3_bind_int(statement, 3, Int32(record.button.rawValue)) == SQLITE_OK,
+            sqlite3_bind_text(statement, 4, record.applicationName, -1, Self.transient) == SQLITE_OK
+        else {
+            throw statementError()
+        }
+
+        if let bundleIdentifier = record.bundleIdentifier {
+            guard sqlite3_bind_text(statement, 5, bundleIdentifier, -1, Self.transient) == SQLITE_OK else {
+                throw statementError()
+            }
+        } else {
+            sqlite3_bind_null(statement, 5)
         }
     }
 
@@ -668,7 +781,18 @@ nonisolated final class KeyDiaryDatabase: @unchecked Sendable {
                 ON key_press_records(application_name, timestamp_ms);
             CREATE INDEX IF NOT EXISTS idx_records_duplicate_check
                 ON key_press_records(timestamp_ms, key_code, application_name, key, bundle_identifier);
-            PRAGMA user_version = 1;
+            CREATE TABLE IF NOT EXISTS mouse_click_records (
+                id TEXT PRIMARY KEY NOT NULL,
+                timestamp_ms INTEGER NOT NULL,
+                button INTEGER NOT NULL CHECK (button IN (0, 1)),
+                application_name TEXT NOT NULL,
+                bundle_identifier TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_mouse_clicks_timestamp
+                ON mouse_click_records(timestamp_ms);
+            CREATE INDEX IF NOT EXISTS idx_mouse_clicks_app_timestamp
+                ON mouse_click_records(application_name, timestamp_ms);
+            PRAGMA user_version = 2;
             """)
     }
 

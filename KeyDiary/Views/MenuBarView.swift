@@ -27,6 +27,9 @@ struct MenuBarView: View {
         Label {
             Text(L10n.format("今日已按键 %@ 次", store.pressesToday.formatted()))
         } icon: { }
+        Label {
+            Text(L10n.format("今日已点击 %@ 次", store.clicksToday.formatted()))
+        } icon: { }
         Divider()
 
         Button("打开主界面") {

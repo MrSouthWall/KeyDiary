@@ -13,6 +13,7 @@ final class KeyboardRecorder {
 
     private let keySoundPlayer = KeySoundPlayer()
     private var pressedKeys: [UInt16: String] = [:]
+    private var pressedMouseButtons: Set<MouseButton> = []
     private var pressedModifierKeyCodes: Set<UInt16> = []
     private var capsLockFeedbackTask: Task<Void, Never>?
     private var recordsKeyPresses = false
@@ -26,7 +27,9 @@ final class KeyboardRecorder {
         }
     )
     var onKeyPress: ((KeyPressRecord) -> Void)?
+    var onMouseClick: ((MouseClickRecord) -> Void)?
     var onPressedKeysChanged: (([UInt16: String]) -> Void)?
+    var onPressedMouseButtonsChanged: ((Set<MouseButton>) -> Void)?
     var onCapsLockStateChanged: ((Bool) -> Void)?
 
     var isRunning: Bool { recordsKeyPresses && quartzKeyboardMonitor.isRunning }
@@ -63,14 +66,14 @@ final class KeyboardRecorder {
     /// Pauses diary recording while keeping the passive modifier-state monitor alive.
     func pause() {
         recordsKeyPresses = false
-        clearPressedKeys()
+        clearPressedInputs()
         refreshCapsLockState()
     }
 
     func stop() {
         recordsKeyPresses = false
         quartzKeyboardMonitor.stop()
-        clearPressedKeys()
+        clearPressedInputs()
         refreshCapsLockState()
     }
 
@@ -81,17 +84,21 @@ final class KeyboardRecorder {
     }
 
     private func resetTransientState() {
-        clearPressedKeys()
+        clearPressedInputs()
         refreshCapsLockState()
     }
 
-    private func clearPressedKeys() {
+    private func clearPressedInputs() {
         capsLockFeedbackTask?.cancel()
         capsLockFeedbackTask = nil
         pressedModifierKeyCodes.removeAll()
         if !pressedKeys.isEmpty {
             pressedKeys.removeAll()
             onPressedKeysChanged?([:])
+        }
+        if !pressedMouseButtons.isEmpty {
+            pressedMouseButtons.removeAll()
+            onPressedMouseButtonsChanged?([])
         }
     }
 
@@ -148,6 +155,20 @@ final class KeyboardRecorder {
                 )
             }
 
+        case .leftMouseDown:
+            setMouseButton(.left, pressed: true)
+            recordMouseClick(button: .left)
+
+        case .leftMouseUp:
+            setMouseButton(.left, pressed: false)
+
+        case .rightMouseDown:
+            setMouseButton(.right, pressed: true)
+            recordMouseClick(button: .right)
+
+        case .rightMouseUp:
+            setMouseButton(.right, pressed: false)
+
         default:
             break
         }
@@ -200,6 +221,14 @@ final class KeyboardRecorder {
         onPressedKeysChanged?(pressedKeys)
     }
 
+    private func setMouseButton(_ button: MouseButton, pressed: Bool) {
+        let didChange = pressed
+            ? pressedMouseButtons.insert(button).inserted
+            : pressedMouseButtons.remove(button) != nil
+        guard didChange else { return }
+        onPressedMouseButtonsChanged?(pressedMouseButtons)
+    }
+
     private func updateCapsLockState(_ isEnabled: Bool) {
         guard isCapsLockEnabled != isEnabled else { return }
         isCapsLockEnabled = isEnabled
@@ -223,6 +252,16 @@ final class KeyboardRecorder {
             bundleIdentifier: application?.bundleIdentifier
         )
         onKeyPress?(record)
+    }
+
+    private func recordMouseClick(button: MouseButton) {
+        let application = NSWorkspace.shared.frontmostApplication
+        onMouseClick?(MouseClickRecord(
+            timestamp: .now,
+            button: button,
+            applicationName: application?.localizedName ?? "Unknown app",
+            bundleIdentifier: application?.bundleIdentifier
+        ))
     }
 
 }

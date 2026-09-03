@@ -43,6 +43,18 @@
 "最近按键 · %@" = "Latest keys · %@";
 "请调整时间或 App 筛选" = "Adjust the time or app filter";
 "当前筛选 · %@ 次按键 · %@" = "Current filter · %@ keystrokes · %@";
+"当前筛选 · %@ 次按键 · %@ 次点击 · %@" = "Current filter · %@ keystrokes · %@ clicks · %@";
+"鼠标点击" = "Mouse Clicks";
+"次点击" = "clicks";
+"左键按下" = "Left button pressed";
+"右键按下" = "Right button pressed";
+"左右键均按下" = "Both buttons pressed";
+"当前筛选 · %@ 次" = "Current filter · %@ clicks";
+"Apple 鼠标点击统计" = "Apple mouse click statistics";
+"左键 %@ 次，右键 %@ 次，总计 %@ 次" = "%@ left clicks, %@ right clicks, %@ total";
+"左键" = "Left";
+"右键" = "Right";
+"总点击" = "Total clicks";
 "当前按键 · %@" = "Current key · %@";
 "准备中" = "Preparing";
 "请调整时间轴的起止位置" = "Adjust the timeline start and end";
@@ -59,6 +71,13 @@
 
 /* Main controls */
 "悬浮键盘" = "Floating Keyboard";
+"鼠标" = "Mouse";
+"隐藏鼠标统计" = "Hide Mouse Statistics";
+"显示鼠标统计" = "Show Mouse Statistics";
+"鼠标统计" = "Mouse statistics";
+"已显示" = "Shown";
+"已隐藏" = "Hidden";
+"今日已点击 %@ 次" = "%@ mouse clicks today";
 "停止" = "Stop";
 "播放" = "Play";
 "暂停" = "Pause";
@@ -180,6 +199,8 @@
 "试听" = "Preview";
 "数据" = "Data";
 "本机记录" = "Local Records";
+"键盘记录" = "Keyboard Records";
+"鼠标点击记录" = "Mouse Click Records";
 "%@ 条" = "%@ records";
 "存储方式" = "Storage";
 "本机 SQLite 数据库" = "Local SQLite database";
@@ -197,6 +218,7 @@
 "清除全部记录" = "Delete All Records";
 "取消" = "Cancel";
 "此操作无法撤销，保存在这台 Mac 上的按键记录将被永久删除。" = "This cannot be undone. Keystroke records stored on this Mac will be permanently deleted.";
+"此操作无法撤销，保存在这台 Mac 上的按键与鼠标点击记录将被永久删除。" = "This cannot be undone. Keyboard and mouse click records stored on this Mac will be permanently deleted.";
 "替换全部本机记录？" = "Replace all local records?";
 "替换并导入" = "Replace and Import";
 "现有记录将被所选文件中的记录替换。应用会先创建 JSON 备份；如果导入失败，数据库不会发生变化。" = "Existing records will be replaced by records from the selected file. The app creates a JSON backup first; if the import fails, the database remains unchanged.";

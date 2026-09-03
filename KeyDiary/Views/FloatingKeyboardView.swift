@@ -57,7 +57,10 @@ struct FloatingKeyboardView: View {
             minHeight: FloatingKeyboardWindowMetrics.minimumHeight
         )
         .background {
-            FloatingWindowBridge()
+            ZStack {
+                FloatingWindowBridge()
+                LiveKeyboardInputBridge(isEnabled: true)
+            }
         }
         .contentShape(windowShape)
         .onHover { isInside in

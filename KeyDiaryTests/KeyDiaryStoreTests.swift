@@ -248,6 +248,36 @@ final class KeyDiaryStoreTests: XCTestCase {
         XCTAssertEqual(store.filteredKeyCounts, [1: 1])
     }
 
+    func testMouseClickCountsUseDateAndApplicationFilters() throws {
+        let calendar = Calendar.current
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let yesterday = try XCTUnwrap(calendar.date(byAdding: .day, value: -1, to: now))
+        let database = try makeDatabase()
+        try database.insert([
+            makeMouseClick(at: yesterday, button: .left, application: "Notes"),
+            makeMouseClick(at: now, button: .left, application: "Safari"),
+            makeMouseClick(at: now.addingTimeInterval(1), button: .left, application: "Safari"),
+            makeMouseClick(at: now.addingTimeInterval(2), button: .right, application: "Notes")
+        ])
+
+        let store = KeyDiaryStore(database: database, now: now.addingTimeInterval(2))
+
+        XCTAssertEqual(store.mouseClickRecordCount, 4)
+        XCTAssertEqual(store.clicksToday, 3)
+        XCTAssertEqual(store.filteredMouseClickCounts, MouseClickCounts(left: 2, right: 1))
+        XCTAssertEqual(store.applications, ["All apps", "Notes", "Safari"])
+
+        store.selectedApplication = "Safari"
+
+        XCTAssertEqual(store.filteredMouseClickCounts, MouseClickCounts(left: 2, right: 0))
+
+        store.clearAllRecords()
+
+        XCTAssertEqual(store.mouseClickRecordCount, 0)
+        XCTAssertEqual(store.filteredMouseClickCounts, MouseClickCounts())
+        XCTAssertEqual(try database.mouseClickCount(), 0)
+    }
+
     func testPlaybackDurationMatchesDatabaseTimingAndSpeed() throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let database = try makeDatabase()
@@ -733,6 +763,28 @@ final class KeyDiaryStoreTests: XCTestCase {
         XCTAssertTrue(pressedKeys.isEmpty)
     }
 
+    func testRecorderEmitsOnlyPrimaryMouseButtonDownEvents() throws {
+        let recorder = KeyboardRecorder()
+        var buttons: [MouseButton] = []
+        var pressedButtons: Set<MouseButton> = []
+        recorder.onMouseClick = { buttons.append($0.button) }
+        recorder.onPressedMouseButtonsChanged = { pressedButtons = $0 }
+
+        recorder.handle(try makeMouseEvent(type: .leftMouseDown))
+        XCTAssertEqual(pressedButtons, [.left])
+
+        recorder.handle(try makeMouseEvent(type: .rightMouseDown))
+        XCTAssertEqual(pressedButtons, [.left, .right])
+
+        recorder.handle(try makeMouseEvent(type: .leftMouseUp))
+        XCTAssertEqual(pressedButtons, [.right])
+
+        recorder.handle(try makeMouseEvent(type: .rightMouseUp))
+        XCTAssertTrue(pressedButtons.isEmpty)
+
+        XCTAssertEqual(buttons, [.left, .right])
+    }
+
     func testRepeatedKeyDownStaysPressedUntilKeyUp() throws {
         let recorder = KeyboardRecorder()
         var pressedKeys: [UInt16: String] = [:]
@@ -921,6 +973,33 @@ final class KeyDiaryStoreTests: XCTestCase {
             applicationName: application,
             bundleIdentifier: "com.example.\(application.lowercased())"
         )
+    }
+
+    private func makeMouseClick(
+        at date: Date,
+        button: MouseButton,
+        application: String
+    ) -> MouseClickRecord {
+        MouseClickRecord(
+            timestamp: date,
+            button: button,
+            applicationName: application,
+            bundleIdentifier: "com.example.\(application.lowercased())"
+        )
+    }
+
+    private func makeMouseEvent(type: NSEvent.EventType) throws -> NSEvent {
+        try XCTUnwrap(NSEvent.mouseEvent(
+            with: type,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 1,
+            pressure: 1
+        ))
     }
 
     private func makeKeyEvent(

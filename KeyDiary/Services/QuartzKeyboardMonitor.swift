@@ -6,14 +6,18 @@
 import AppKit
 import ApplicationServices
 
-/// Passively observes keyboard events in the current login session.
+/// Passively observes keyboard and primary mouse-button events in the current login session.
 @MainActor
 final class QuartzKeyboardMonitor {
     private static let systemDefinedEventType = CGEventType(rawValue: 14)!
     private static let hidEventMask: CGEventMask = [
         CGEventType.keyDown,
         CGEventType.keyUp,
-        CGEventType.flagsChanged
+        CGEventType.flagsChanged,
+        CGEventType.leftMouseDown,
+        CGEventType.leftMouseUp,
+        CGEventType.rightMouseDown,
+        CGEventType.rightMouseUp
     ].reduce(into: CGEventMask(0)) { mask, type in
         mask |= CGEventMask(1) << type.rawValue
     }

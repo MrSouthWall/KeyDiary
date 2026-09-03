@@ -10,6 +10,7 @@ struct KeyDiaryStatusBar: View {
     @Bindable var videoPlayer: KeyboardVideoPlayer
     @Binding var selection: KeyboardDisplayMode
     @Binding var keyboardLayout: KeyboardLayoutMode
+    @Binding var showsMouseStatistics: Bool
     @AppStorage(KeySoundPreferences.isEnabledStorageKey) private var isKeySoundEnabled = false
     @State private var isVideoFormatPresented = false
 
@@ -59,6 +60,8 @@ struct KeyDiaryStatusBar: View {
                 if selection == .statistics {
                     barDivider
                     KeyboardLayoutPicker(selection: $keyboardLayout, tint: optionTint)
+                    barDivider
+                    mouseStatisticsButton
                 }
 
                 if selection == .playback {
@@ -88,6 +91,28 @@ struct KeyDiaryStatusBar: View {
 
     private var optionTint: Color {
         themeColor
+    }
+
+    private var mouseStatisticsButton: some View {
+        Button {
+            showsMouseStatistics.toggle()
+        } label: {
+            Label(
+                "鼠标",
+                systemImage: showsMouseStatistics ? "computermouse.fill" : "computermouse"
+            )
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(showsMouseStatistics ? themeColor : Color.secondary)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .frame(height: 52)
+            .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(.plain)
+        .help(showsMouseStatistics ? L10n.text("隐藏鼠标统计") : L10n.text("显示鼠标统计"))
+        .accessibilityLabel("鼠标统计")
+        .accessibilityValue(showsMouseStatistics ? L10n.text("已显示") : L10n.text("已隐藏"))
+        .accessibilityAddTraits(showsMouseStatistics ? .isSelected : [])
     }
 
     private var floatingKeyboardButton: some View {

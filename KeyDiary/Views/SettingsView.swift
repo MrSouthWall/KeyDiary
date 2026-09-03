@@ -192,8 +192,14 @@ struct KeyDiarySettingsView: View {
             }
 
             Section("数据") {
-                LabeledContent("本机记录") {
+                LabeledContent("键盘记录") {
                     Text(L10n.format("%@ 条", store.recordCount.formatted()))
+                        .foregroundStyle(.secondary)
+                        .contentTransition(.numericText())
+                }
+
+                LabeledContent("鼠标点击记录") {
+                    Text(L10n.format("%@ 条", store.mouseClickRecordCount.formatted()))
                         .foregroundStyle(.secondary)
                         .contentTransition(.numericText())
                 }
@@ -238,7 +244,7 @@ struct KeyDiarySettingsView: View {
                     }
                     .tint(.red)
                     .disabled(
-                        store.recordCount == 0 ||
+                        (store.recordCount == 0 && store.mouseClickRecordCount == 0) ||
                         store.isDataTransferInProgress ||
                         store.isPlaybackVideoExportInProgress
                     )
@@ -259,7 +265,7 @@ struct KeyDiarySettingsView: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("此操作无法撤销，保存在这台 Mac 上的按键记录将被永久删除。")
+            Text("此操作无法撤销，保存在这台 Mac 上的按键与鼠标点击记录将被永久删除。")
         }
         .confirmationDialog(
             "替换全部本机记录？",

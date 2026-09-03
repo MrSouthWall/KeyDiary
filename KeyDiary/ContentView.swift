@@ -20,23 +20,37 @@ struct ContentView: View {
     @State private var isShowingCustomRange = false
     @State private var lastLiveKeySummary: String?
     @AppStorage("statisticsKeyboardLayout") private var statisticsKeyboardLayout: KeyboardLayoutMode = .qwerty
+    @AppStorage("showsMouseStatistics") private var showsMouseStatistics = true
 
     var body: some View {
         ZStack {
             stageBackground
 
-            KeyboardStage(
-                activeKeyDescription: activeKeyDescription,
-                activeKeyCodes: activeKeyCodes,
-                isCapsLockEnabled: store.isCapsLockEnabled,
-                displayMode: displayMode,
-                layoutMode: displayMode == .statistics ? statisticsKeyboardLayout : .qwerty,
-                isPlaying: stageIsPlaying,
-                keyCounts: displayMode == .statistics ? store.filteredKeyCounts : [:],
-                alignsToTop: false,
-                pixelFrame: displayMode == .cinema ? videoPlayer.pixelFrame : nil,
-                pixelColorMode: displayMode == .cinema ? videoPlayer.colorMode : nil
-            )
+            Group {
+                if displayMode == .statistics {
+                    InputStatisticsStage(
+                        keyCounts: store.filteredKeyCounts,
+                        mouseClickCounts: store.filteredMouseClickCounts,
+                        pressedMouseButtons: store.activeLiveMouseButtons,
+                        keyboardLayout: statisticsKeyboardLayout,
+                        isCapsLockEnabled: store.isCapsLockEnabled,
+                        showsMouse: showsMouseStatistics
+                    )
+                } else {
+                    KeyboardStage(
+                        activeKeyDescription: activeKeyDescription,
+                        activeKeyCodes: activeKeyCodes,
+                        isCapsLockEnabled: store.isCapsLockEnabled,
+                        displayMode: displayMode,
+                        layoutMode: .qwerty,
+                        isPlaying: stageIsPlaying,
+                        keyCounts: [:],
+                        alignsToTop: false,
+                        pixelFrame: displayMode == .cinema ? videoPlayer.pixelFrame : nil,
+                        pixelColorMode: displayMode == .cinema ? videoPlayer.colorMode : nil
+                    )
+                }
+            }
             .transaction(value: displayMode) { transaction in
                 transaction.animation = nil
                 transaction.disablesAnimations = true
@@ -52,6 +66,7 @@ struct ContentView: View {
                     videoPlayer: videoPlayer,
                     selection: $displayMode,
                     keyboardLayout: $statisticsKeyboardLayout,
+                    showsMouseStatistics: $showsMouseStatistics,
                     showCustomRange: { isShowingCustomRange = true },
                     openFloatingKeyboard: openFloatingKeyboard,
                     openVideoPreview: openVideoPreview
@@ -88,6 +103,9 @@ struct ContentView: View {
             .animation(modeTransitionAnimation, value: displayMode)
         }
         .frame(minWidth: 920, minHeight: 600)
+        .background {
+            LiveKeyboardInputBridge(isEnabled: displayMode == .live)
+        }
         .toolbar(removing: .title)
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .onChange(of: displayMode) { _, newMode in
@@ -168,7 +186,10 @@ struct ContentView: View {
             if !store.hasInputMonitoringPermission { return L10n.text("等待输入监控授权") }
             return store.isRecording ? L10n.text("正在实时记录") : L10n.text("实时记录已暂停")
         case .statistics:
-            return store.filteredRecordCount == 0 ? L10n.text("暂无统计数据") : L10n.text("统计已更新")
+            return store.filteredRecordCount == 0 &&
+                (!showsMouseStatistics || store.filteredMouseClickCounts.total == 0)
+                ? L10n.text("暂无统计数据")
+                : L10n.text("统计已更新")
         case .playback:
             if store.isPlaying { return L10n.text("正在回放") }
             return store.playbackRecordCount == 0
@@ -186,7 +207,18 @@ struct ContentView: View {
             if !store.isRecording { return L10n.text("可在设置中继续记录") }
             return L10n.format("最近按键 · %@", lastLiveKeySummary ?? L10n.text("等待输入"))
         case .statistics:
-            if store.filteredRecordCount == 0 { return L10n.text("请调整时间或 App 筛选") }
+            if store.filteredRecordCount == 0 &&
+                (!showsMouseStatistics || store.filteredMouseClickCounts.total == 0) {
+                return L10n.text("请调整时间或 App 筛选")
+            }
+            if showsMouseStatistics {
+                return L10n.format(
+                    "当前筛选 · %@ 次按键 · %@ 次点击 · %@",
+                    store.filteredRecordCount.formatted(),
+                    store.filteredMouseClickCounts.total.formatted(),
+                    statisticsKeyboardLayout.accessibilityTitle
+                )
+            }
             return L10n.format(
                 "当前筛选 · %@ 次按键 · %@",
                 store.filteredRecordCount.formatted(),
@@ -253,6 +285,48 @@ struct ContentView: View {
 
     private var modeTransitionAnimation: Animation? {
         reduceMotion ? nil : .easeOut(duration: 0.16)
+    }
+}
+
+private struct InputStatisticsStage: View {
+    let keyCounts: [UInt16: Int]
+    let mouseClickCounts: MouseClickCounts
+    let pressedMouseButtons: Set<MouseButton>
+    let keyboardLayout: KeyboardLayoutMode
+    let isCapsLockEnabled: Bool
+    let showsMouse: Bool
+
+    var body: some View {
+        GeometryReader { proxy in
+            let mouseWidth = min(max(proxy.size.width * 0.21, 180), 230)
+
+            HStack(spacing: 22) {
+                KeyboardStage(
+                    activeKeyDescription: nil,
+                    activeKeyCodes: [],
+                    isCapsLockEnabled: isCapsLockEnabled,
+                    displayMode: .statistics,
+                    layoutMode: keyboardLayout,
+                    isPlaying: false,
+                    keyCounts: keyCounts,
+                    alignsToTop: false,
+                    pixelFrame: nil,
+                    pixelColorMode: nil
+                )
+                .layoutPriority(1)
+
+                if showsMouse {
+                    AppleMouseStatisticsView(
+                        counts: mouseClickCounts,
+                        pressedButtons: pressedMouseButtons
+                    )
+                        .frame(width: mouseWidth)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .animation(.easeInOut(duration: 0.2), value: showsMouse)
+        }
     }
 }
 

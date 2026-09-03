@@ -35,19 +35,24 @@ final class KeyDiaryStore {
     private var saveTask: Task<Void, Never>?
     private var dayRolloverTask: Task<Void, Never>?
     private var pendingRecords: [KeyPressRecord] = []
+    private var pendingMouseClicks: [MouseClickRecord] = []
     private var rangeSelection: DateRangeSelection = .recentDays(1)
     private var currentDayStart: Date
     private var lastFilteredTimestamp: Date?
     private var wantsRecording = true
 
     private(set) var recordCount = 0
+    private(set) var mouseClickRecordCount = 0
     private(set) var filteredRecordCount = 0
     private(set) var filteredKeyCounts: [UInt16: Int] = [:]
+    private(set) var filteredMouseClickCounts = MouseClickCounts()
     private(set) var pressesToday = 0
+    private(set) var clicksToday = 0
     private(set) var applications: [String] = ["All apps"]
     private(set) var isRecording = false
     private(set) var hasInputMonitoringPermission = false
     private(set) var activeLiveKeys: [UInt16: String] = [:]
+    private(set) var activeLiveMouseButtons: Set<MouseButton> = []
     private(set) var isCapsLockEnabled = false
     private(set) var isPlaying = false
     private(set) var activePlaybackKey: String?
@@ -160,9 +165,17 @@ final class KeyDiaryStore {
         recorder.onKeyPress = { [weak self] record in
             self?.append(record)
         }
+        recorder.onMouseClick = { [weak self] record in
+            self?.append(record)
+        }
         recorder.onPressedKeysChanged = { [weak self] pressedKeys in
             withAnimation(.spring(response: 0.12, dampingFraction: 0.65)) {
                 self?.activeLiveKeys = pressedKeys
+            }
+        }
+        recorder.onPressedMouseButtonsChanged = { [weak self] buttons in
+            withAnimation(.spring(response: 0.12, dampingFraction: 0.72)) {
+                self?.activeLiveMouseButtons = buttons
             }
         }
         isCapsLockEnabled = recorder.isCapsLockEnabled
@@ -232,6 +245,7 @@ final class KeyDiaryStore {
         saveTask?.cancel()
         saveTask = nil
         pendingRecords.removeAll(keepingCapacity: false)
+        pendingMouseClicks.removeAll(keepingCapacity: false)
         do {
             try database.deleteAll()
             selectedApplication = "All apps"
@@ -576,15 +590,25 @@ final class KeyDiaryStore {
         scheduleSave()
     }
 
-    private func addToDerivedState(_ record: KeyPressRecord, now: Date) {
-        if !applications.contains(record.applicationName) {
-            applications.append(record.applicationName)
-            applications.sort {
-                if $0 == "All apps" { return true }
-                if $1 == "All apps" { return false }
-                return $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
-            }
+    private func append(_ record: MouseClickRecord) {
+        refreshDateDependentState(now: record.timestamp)
+        pendingMouseClicks.append(record)
+        mouseClickRecordCount += 1
+        addApplicationIfNeeded(record.applicationName)
+
+        let nextDay = Calendar.current.date(byAdding: .day, value: 1, to: currentDayStart)
+            ?? record.timestamp
+        if record.timestamp >= currentDayStart && record.timestamp < nextDay {
+            clicksToday += 1
         }
+        if matchesCurrentFilter(record) {
+            filteredMouseClickCounts[record.button] += 1
+        }
+        scheduleSave()
+    }
+
+    private func addToDerivedState(_ record: KeyPressRecord, now: Date) {
+        addApplicationIfNeeded(record.applicationName)
 
         let nextDay = Calendar.current.date(byAdding: .day, value: 1, to: currentDayStart) ?? now
         if record.timestamp >= currentDayStart && record.timestamp < nextDay {
@@ -620,6 +644,7 @@ final class KeyDiaryStore {
     private func rebuildDerivedState(now: Date = .now) {
         do {
             recordCount = try database.count()
+            mouseClickRecordCount = try database.mouseClickCount()
             applications = ["All apps"] + (try database.applicationNames())
             if !applications.contains(selectedApplication) {
                 selectedApplication = "All apps"
@@ -641,6 +666,7 @@ final class KeyDiaryStore {
             applicationName: nil
         )
         pressesToday = (try? database.count(query: query)) ?? 0
+        clicksToday = (try? database.mouseClickCount(query: query)) ?? 0
     }
 
     private func rebuildFilteredState() {
@@ -648,6 +674,7 @@ final class KeyDiaryStore {
         do {
             let query = currentQuery
             filteredKeyCounts = try database.keyCounts(query: query)
+            filteredMouseClickCounts = try database.mouseClickCounts(query: query)
             let metrics = try database.playbackMetrics(query: query, speed: playbackSpeed)
             filteredRecordCount = metrics.count
             playbackRecordCount = metrics.count
@@ -661,6 +688,7 @@ final class KeyDiaryStore {
             filteredRecordCount = 0
             playbackRecordCount = 0
             filteredKeyCounts = [:]
+            filteredMouseClickCounts = MouseClickCounts()
             estimatedPlaybackDuration = 0
             playbackTimelineStart = nil
             playbackTimelineEnd = nil
@@ -690,6 +718,22 @@ final class KeyDiaryStore {
         record.timestamp >= fromDate &&
         record.timestamp <= toDate &&
         (selectedApplication == "All apps" || record.applicationName == selectedApplication)
+    }
+
+    private func matchesCurrentFilter(_ record: MouseClickRecord) -> Bool {
+        record.timestamp >= fromDate &&
+        record.timestamp <= toDate &&
+        (selectedApplication == "All apps" || record.applicationName == selectedApplication)
+    }
+
+    private func addApplicationIfNeeded(_ applicationName: String) {
+        guard !applications.contains(applicationName) else { return }
+        applications.append(applicationName)
+        applications.sort {
+            if $0 == "All apps" { return true }
+            if $1 == "All apps" { return false }
+            return $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+        }
     }
 
     private func applyRollingDateRange(now: Date) {
@@ -760,16 +804,22 @@ final class KeyDiaryStore {
         saveTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard !Task.isCancelled, let self else { return }
-            let batch = self.pendingRecords
+            let keyPressBatch = self.pendingRecords
+            let mouseClickBatch = self.pendingMouseClicks
             self.pendingRecords.removeAll(keepingCapacity: true)
+            self.pendingMouseClicks.removeAll(keepingCapacity: true)
             self.saveTask = nil
-            self.database.insertAsync(batch) { [weak self] result in
+            self.database.insertInputsAsync(
+                keyPresses: keyPressBatch,
+                mouseClicks: mouseClickBatch
+            ) { [weak self] result in
                 guard case .failure(let error) = result else { return }
                 Task { @MainActor [weak self] in
                     guard let self else { return }
-                    self.pendingRecords.insert(contentsOf: batch, at: 0)
+                    self.pendingRecords.insert(contentsOf: keyPressBatch, at: 0)
+                    self.pendingMouseClicks.insert(contentsOf: mouseClickBatch, at: 0)
                     self.logger.error(
-                        "Unable to persist key presses: \(error.localizedDescription, privacy: .public)"
+                        "Unable to persist input events: \(error.localizedDescription, privacy: .public)"
                     )
                     self.scheduleSave()
                 }
@@ -778,14 +828,20 @@ final class KeyDiaryStore {
     }
 
     private func persistPendingRecords() {
-        guard !pendingRecords.isEmpty else { return }
-        let batch = pendingRecords
+        guard !pendingRecords.isEmpty || !pendingMouseClicks.isEmpty else { return }
+        let keyPressBatch = pendingRecords
+        let mouseClickBatch = pendingMouseClicks
         pendingRecords.removeAll(keepingCapacity: true)
+        pendingMouseClicks.removeAll(keepingCapacity: true)
         do {
-            _ = try database.insert(batch)
+            try database.insertInputs(
+                keyPresses: keyPressBatch,
+                mouseClicks: mouseClickBatch
+            )
         } catch {
-            pendingRecords.insert(contentsOf: batch, at: 0)
-            logger.error("Unable to persist key presses: \(error.localizedDescription, privacy: .public)")
+            pendingRecords.insert(contentsOf: keyPressBatch, at: 0)
+            pendingMouseClicks.insert(contentsOf: mouseClickBatch, at: 0)
+            logger.error("Unable to persist input events: \(error.localizedDescription, privacy: .public)")
         }
     }
 
