@@ -23,7 +23,7 @@ enum DataFilePanels {
     static func chooseExportFile(format: DataTransferFormat) -> URL? {
         let panel = NSSavePanel()
         panel.title = L10n.text("导出键盘日记数据")
-        panel.message = L10n.text("导出的文件包含按键和应用信息，请妥善保管。")
+        panel.message = L10n.text("导出的文件包含按键、鼠标点击和应用信息，请妥善保管。")
         panel.prompt = L10n.text("导出")
         panel.canCreateDirectories = true
         panel.allowedContentTypes = [format.contentType]

@@ -10,9 +10,9 @@ import SQLite3
 nonisolated struct KeyDiaryRecordQuery: Sendable {
     let fromDate: Date?
     let toDate: Date?
-    let applicationName: String?
+    let applicationNames: [String]?
 
-    static let all = KeyDiaryRecordQuery(fromDate: nil, toDate: nil, applicationName: nil)
+    static let all = KeyDiaryRecordQuery(fromDate: nil, toDate: nil, applicationNames: nil)
 }
 
 nonisolated enum DataImportMode: Sendable {
@@ -59,7 +59,12 @@ nonisolated enum KeyDiaryDatabaseError: LocalizedError {
 /// which keeps SQLite access off the main actor and makes transactions atomic.
 nonisolated final class KeyDiaryDatabase: @unchecked Sendable {
     typealias RecordReceiver = (KeyPressRecord) throws -> Void
+    typealias MouseClickRecordReceiver = (MouseClickRecord) throws -> Void
     typealias RecordProducer = (_ receive: @escaping RecordReceiver) throws -> Void
+    typealias InputProducer = (
+        _ receiveKeyPress: @escaping RecordReceiver,
+        _ receiveMouseClick: @escaping MouseClickRecordReceiver
+    ) throws -> Void
 
     private static let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
@@ -170,29 +175,49 @@ nonisolated final class KeyDiaryDatabase: @unchecked Sendable {
     }
 
     func importRecords(mode: DataImportMode, producer: RecordProducer) throws -> DataImportResult {
+        try importInputs(mode: mode) { receiveKeyPress, _ in
+            try producer(receiveKeyPress)
+        }
+    }
+
+    func importInputs(mode: DataImportMode, producer: InputProducer) throws -> DataImportResult {
         try queue.sync {
             try withTransaction {
                 if mode == .replace {
                     try execute("DELETE FROM key_press_records;")
+                    try execute("DELETE FROM mouse_click_records;")
                 }
 
-                let statement = try prepare(Self.insertSQL)
-                defer { sqlite3_finalize(statement) }
+                let keyPressStatement = try prepare(Self.insertSQL)
+                defer { sqlite3_finalize(keyPressStatement) }
+                let mouseClickStatement = try prepare(Self.insertMouseClickSQL)
+                defer { sqlite3_finalize(mouseClickStatement) }
 
                 var total = 0
                 var inserted = 0
-                try producer { [self] record in
+                try producer({ [self] record in
                     total += 1
-                    try bind(record, to: statement)
-                    guard sqlite3_step(statement) == SQLITE_DONE else {
+                    try bind(record, to: keyPressStatement)
+                    guard sqlite3_step(keyPressStatement) == SQLITE_DONE else {
                         throw statementError()
                     }
                     if sqlite3_changes(connection) > 0 {
                         inserted += 1
                     }
-                    sqlite3_reset(statement)
-                    sqlite3_clear_bindings(statement)
-                }
+                    sqlite3_reset(keyPressStatement)
+                    sqlite3_clear_bindings(keyPressStatement)
+                }, { [self] record in
+                    total += 1
+                    try bind(record, to: mouseClickStatement)
+                    guard sqlite3_step(mouseClickStatement) == SQLITE_DONE else {
+                        throw statementError()
+                    }
+                    if sqlite3_changes(connection) > 0 {
+                        inserted += 1
+                    }
+                    sqlite3_reset(mouseClickStatement)
+                    sqlite3_clear_bindings(mouseClickStatement)
+                })
 
                 return DataImportResult(
                     inserted: inserted,
@@ -241,6 +266,22 @@ nonisolated final class KeyDiaryDatabase: @unchecked Sendable {
                 }
 
                 return deleted
+            }
+        }
+    }
+
+    @discardableResult
+    func deleteKeyPresses(query: KeyDiaryRecordQuery) throws -> Int {
+        try queue.sync {
+            try withTransaction {
+                let clause = whereClause(for: query)
+                let statement = try prepare("DELETE FROM key_press_records\(clause.sql);")
+                defer { sqlite3_finalize(statement) }
+                try bind(clause.bindings, to: statement)
+                guard sqlite3_step(statement) == SQLITE_DONE else {
+                    throw statementError()
+                }
+                return Int(sqlite3_changes(connection))
             }
         }
     }
@@ -467,6 +508,24 @@ nonisolated final class KeyDiaryDatabase: @unchecked Sendable {
         }
     }
 
+    func forEachMouseClickRecord(
+        query: KeyDiaryRecordQuery = .all,
+        _ body: (MouseClickRecord) throws -> Void
+    ) throws {
+        try queue.sync {
+            let clause = whereClause(for: query)
+            let statement = try prepare(
+                Self.selectMouseClickColumns + clause.sql + " ORDER BY timestamp_ms, id;"
+            )
+            defer { sqlite3_finalize(statement) }
+            try bind(clause.bindings, to: statement)
+
+            while sqlite3_step(statement) == SQLITE_ROW {
+                try body(try mouseClickRecord(from: statement))
+            }
+        }
+    }
+
     func checkpoint() {
         queue.sync {
             guard let connection else { return }
@@ -480,6 +539,11 @@ nonisolated final class KeyDiaryDatabase: @unchecked Sendable {
     private static let selectColumns = """
         SELECT id, timestamp_ms, key_code, key, application_name, bundle_identifier
         FROM key_press_records
+        """
+
+    private static let selectMouseClickColumns = """
+        SELECT id, timestamp_ms, button, application_name, bundle_identifier
+        FROM mouse_click_records
         """
 
     private static let insertSQL = """
@@ -615,9 +679,10 @@ nonisolated final class KeyDiaryDatabase: @unchecked Sendable {
             conditions.append("timestamp_ms <= ?")
             bindings.append(.integer(Self.milliseconds(from: toDate)))
         }
-        if let applicationName = query.applicationName {
-            conditions.append("application_name = ?")
-            bindings.append(.text(applicationName))
+        if let applicationNames = query.applicationNames, !applicationNames.isEmpty {
+            let placeholders = Array(repeating: "?", count: applicationNames.count).joined(separator: ", ")
+            conditions.append("application_name IN (\(placeholders))")
+            bindings.append(contentsOf: applicationNames.map(Binding.text))
         }
 
         return conditions.isEmpty
@@ -734,6 +799,24 @@ nonisolated final class KeyDiaryDatabase: @unchecked Sendable {
             keyCode: UInt16(clamping: sqlite3_column_int(statement, 2)),
             key: string(from: statement, column: 3),
             applicationName: string(from: statement, column: 4),
+            bundleIdentifier: bundleIdentifier
+        )
+    }
+
+    private func mouseClickRecord(from statement: OpaquePointer?) throws -> MouseClickRecord {
+        guard let id = UUID(uuidString: string(from: statement, column: 0)),
+              let button = MouseButton(rawValue: Int(sqlite3_column_int(statement, 2))) else {
+            throw KeyDiaryDatabaseError.invalidRecord
+        }
+        let bundleIdentifier = sqlite3_column_type(statement, 4) == SQLITE_NULL
+            ? nil
+            : string(from: statement, column: 4)
+
+        return MouseClickRecord(
+            id: id,
+            timestamp: Self.date(fromMilliseconds: sqlite3_column_int64(statement, 1)),
+            button: button,
+            applicationName: string(from: statement, column: 3),
             bundleIdentifier: bundleIdentifier
         )
     }

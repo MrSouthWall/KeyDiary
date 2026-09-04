@@ -43,6 +43,7 @@ final class KeyDiaryStore {
 
     private(set) var recordCount = 0
     private(set) var mouseClickRecordCount = 0
+    var hasExportableData: Bool { recordCount > 0 || mouseClickRecordCount > 0 }
     private(set) var filteredRecordCount = 0
     private(set) var filteredKeyCounts: [UInt16: Int] = [:]
     private(set) var filteredMouseClickCounts = MouseClickCounts()
@@ -76,10 +77,23 @@ final class KeyDiaryStore {
     private(set) var estimatedPlaybackDuration: TimeInterval = 0
     private(set) var fromDate: Date
     private(set) var toDate: Date
-    var selectedApplication = "All apps" {
+    private(set) var selectedApplications: Set<String> = [] {
         didSet {
-            guard selectedApplication != oldValue else { return }
+            guard selectedApplications != oldValue else { return }
             rebuildFilteredState()
+        }
+    }
+
+    var selectsAllApplications: Bool { selectedApplications.isEmpty }
+
+    var applicationFilterTitle: String {
+        switch selectedApplications.count {
+        case 0:
+            return "All apps"
+        case 1:
+            return selectedApplications.first ?? "All apps"
+        default:
+            return L10n.format("%lld 个 App", Int64(selectedApplications.count))
         }
     }
 
@@ -248,11 +262,36 @@ final class KeyDiaryStore {
         pendingMouseClicks.removeAll(keepingCapacity: false)
         do {
             try database.deleteAll()
-            selectedApplication = "All apps"
+            selectedApplications = []
             rebuildDerivedState()
         } catch {
             present(error: error, title: "无法清除数据")
         }
+    }
+
+    func selectAllApplications() {
+        selectedApplications = []
+    }
+
+    func toggleApplicationSelection(_ application: String) {
+        guard application != "All apps" else {
+            selectAllApplications()
+            return
+        }
+
+        var selection = selectedApplications
+        if selection.contains(application) {
+            selection.remove(application)
+        } else {
+            selection.insert(application)
+        }
+        selectedApplications = selection
+    }
+
+    func isApplicationSelected(_ application: String) -> Bool {
+        application == "All apps"
+            ? selectsAllApplications
+            : selectedApplications.contains(application)
     }
 
     func dataEditorPage(
@@ -264,6 +303,11 @@ final class KeyDiaryStore {
         return try database.editorPage(query: query, limit: limit, offset: offset)
     }
 
+    func keyPressRecordCount(from: Date?, to: Date?) throws -> Int {
+        flushPersistence()
+        return try database.count(query: dateRangeQuery(from: from, to: to))
+    }
+
     @discardableResult
     func deleteRecords(ids: Set<UUID>) throws -> Int {
         guard !ids.isEmpty else { return 0 }
@@ -273,6 +317,18 @@ final class KeyDiaryStore {
         stopPlayback()
         flushPersistence()
         let deleted = try database.delete(ids: ids)
+        rebuildDerivedState()
+        return deleted
+    }
+
+    @discardableResult
+    func deleteKeyPressRecords(from: Date?, to: Date?) throws -> Int {
+        guard !isDataTransferInProgress, !isPlaybackVideoExportInProgress else {
+            throw DataEditorError.operationInProgress
+        }
+        stopPlayback()
+        flushPersistence()
+        let deleted = try database.deleteKeyPresses(query: dateRangeQuery(from: from, to: to))
         rebuildDerivedState()
         return deleted
     }
@@ -424,7 +480,7 @@ final class KeyDiaryStore {
         let query = currentPlaybackQuery
         let speed = playbackSpeed
         let dateRangeTitle = playbackExportRangeTitle
-        let applicationTitle = selectedApplication
+        let applicationTitle = applicationFilterTitle
         let keySoundConfiguration = KeySoundConfiguration.current
         let exporter = playbackVideoExporter
 
@@ -646,8 +702,10 @@ final class KeyDiaryStore {
             recordCount = try database.count()
             mouseClickRecordCount = try database.mouseClickCount()
             applications = ["All apps"] + (try database.applicationNames())
-            if !applications.contains(selectedApplication) {
-                selectedApplication = "All apps"
+            let availableApplications = Set(applications.dropFirst())
+            let validSelection = selectedApplications.intersection(availableApplications)
+            if validSelection != selectedApplications {
+                selectedApplications = validSelection
             }
             rebuildTodayCount(now: now)
             rebuildFilteredState()
@@ -663,7 +721,7 @@ final class KeyDiaryStore {
         let query = KeyDiaryRecordQuery(
             fromDate: currentDayStart,
             toDate: nextDay.addingTimeInterval(-0.001),
-            applicationName: nil
+            applicationNames: nil
         )
         pressesToday = (try? database.count(query: query)) ?? 0
         clicksToday = (try? database.mouseClickCount(query: query)) ?? 0
@@ -702,7 +760,15 @@ final class KeyDiaryStore {
         KeyDiaryRecordQuery(
             fromDate: fromDate,
             toDate: toDate,
-            applicationName: selectedApplication == "All apps" ? nil : selectedApplication
+            applicationNames: selectedApplications.isEmpty ? nil : selectedApplications.sorted()
+        )
+    }
+
+    private func dateRangeQuery(from: Date?, to: Date?) -> KeyDiaryRecordQuery {
+        KeyDiaryRecordQuery(
+            fromDate: from.map { date in to.map { min(date, $0) } ?? date },
+            toDate: to.map { date in from.map { max(date, $0) } ?? date },
+            applicationNames: nil
         )
     }
 
@@ -710,20 +776,20 @@ final class KeyDiaryStore {
         KeyDiaryRecordQuery(
             fromDate: playbackSelectionStart ?? fromDate,
             toDate: playbackSelectionEnd ?? toDate,
-            applicationName: selectedApplication == "All apps" ? nil : selectedApplication
+            applicationNames: selectedApplications.isEmpty ? nil : selectedApplications.sorted()
         )
     }
 
     private func matchesCurrentFilter(_ record: KeyPressRecord) -> Bool {
         record.timestamp >= fromDate &&
         record.timestamp <= toDate &&
-        (selectedApplication == "All apps" || record.applicationName == selectedApplication)
+        (selectedApplications.isEmpty || selectedApplications.contains(record.applicationName))
     }
 
     private func matchesCurrentFilter(_ record: MouseClickRecord) -> Bool {
         record.timestamp >= fromDate &&
         record.timestamp <= toDate &&
-        (selectedApplication == "All apps" || record.applicationName == selectedApplication)
+        (selectedApplications.isEmpty || selectedApplications.contains(record.applicationName))
     }
 
     private func addApplicationIfNeeded(_ applicationName: String) {

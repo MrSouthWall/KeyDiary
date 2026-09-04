@@ -46,6 +46,7 @@ private final class DataEditorViewModel {
     var searchText = ""
     var records: [EditableKeyPressRecord] = []
     var totalCount = 0
+    var rangeRecordCount = 0
     var pageIndex = 0
     var selection: Set<UUID> = []
     var operationStatus: String?
@@ -97,6 +98,8 @@ private final class DataEditorViewModel {
                 offset: pageIndex * pageSize
             )
             totalCount = page.totalCount
+            let bounds = dateBounds
+            rangeRecordCount = try store.keyPressRecordCount(from: bounds.from, to: bounds.to)
 
             let maximumPageIndex = max(pageCount - 1, 0)
             if pageIndex > maximumPageIndex {
@@ -114,6 +117,7 @@ private final class DataEditorViewModel {
         } catch {
             records = []
             totalCount = 0
+            rangeRecordCount = 0
             notice = DataEditorNotice(
                 title: L10n.text("无法读取数据"),
                 message: error.localizedDescription
@@ -158,6 +162,38 @@ private final class DataEditorViewModel {
         }
     }
 
+    func deleteDateRange() {
+        guard rangeRecordCount > 0 else { return }
+        let bounds = dateBounds
+
+        do {
+            let deleted = try store.deleteKeyPressRecords(from: bounds.from, to: bounds.to)
+            selection.removeAll()
+            operationStatus = L10n.format("已删除 %@ 条按键记录", deleted.formatted())
+            if let selectedApplication,
+               !applicationOptions.contains(selectedApplication) {
+                self.selectedApplication = nil
+            }
+            reload(resetPage: false, clearSelection: false)
+        } catch {
+            notice = DataEditorNotice(
+                title: L10n.text("无法删除记录"),
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    var dateRangeTitle: String {
+        guard rangePreset == .custom else { return rangePreset.title }
+        let bounds = dateBounds
+        guard let from = bounds.from, let to = bounds.to else { return rangePreset.title }
+        return L10n.format(
+            "%@ 至 %@",
+            from.formatted(date: .abbreviated, time: .shortened),
+            to.formatted(date: .abbreviated, time: .shortened)
+        )
+    }
+
     private var currentQuery: DataEditorQuery {
         let bounds = dateBounds
         return DataEditorQuery(
@@ -198,6 +234,7 @@ private final class DataEditorViewModel {
 struct DataEditorView: View {
     @State private var model: DataEditorViewModel
     @State private var isShowingDeleteConfirmation = false
+    @State private var isShowingRangeDeleteConfirmation = false
 
     init(store: KeyDiaryStore) {
         _model = State(initialValue: DataEditorViewModel(store: store))
@@ -228,6 +265,21 @@ struct DataEditorView: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text("删除后无法撤销。只有当前明确选中的记录会被删除。")
+        }
+        .confirmationDialog(
+            L10n.format(
+                "删除“%@”内的全部 %@ 条按键记录？",
+                model.dateRangeTitle,
+                model.rangeRecordCount.formatted()
+            ),
+            isPresented: $isShowingRangeDeleteConfirmation
+        ) {
+            Button("永久删除此时间范围", role: .destructive) {
+                model.deleteDateRange()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("此操作只按时间范围删除全部按键记录，不受 App、搜索和问题筛选影响；鼠标点击记录会保留。删除后无法撤销。")
         }
         .alert(item: $model.notice) { notice in
             Alert(
@@ -407,6 +459,16 @@ struct DataEditorView: View {
             .help("下一页")
 
             Divider().frame(height: 22)
+
+            Button("删除时间范围…", role: .destructive) {
+                isShowingRangeDeleteConfirmation = true
+            }
+            .disabled(model.rangeRecordCount == 0 || model.isDeleteUnavailable)
+            .help(
+                model.isDeleteUnavailable
+                    ? L10n.text("请等待导入、导出或视频生成结束")
+                    : L10n.format("删除“%@”内的全部按键记录", model.dateRangeTitle)
+            )
 
             Button("删除选中项…", role: .destructive) {
                 isShowingDeleteConfirmation = true

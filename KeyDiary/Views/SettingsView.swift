@@ -228,7 +228,7 @@ struct KeyDiarySettingsView: View {
                     }
                 }
 
-                Text("导出的文件包含按键与应用信息，请妥善保管。JSON、CSV 和 Excel 均可再次导入。")
+                Text("导出的文件包含按键、鼠标点击与应用信息，请妥善保管。JSON、CSV 和 Excel 均可再次导入。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -346,7 +346,7 @@ struct KeyDiarySettingsView: View {
             }
         }
         .disabled(
-            store.recordCount == 0 ||
+            !store.hasExportableData ||
             store.isDataTransferInProgress ||
             store.isPlaybackVideoExportInProgress
         )

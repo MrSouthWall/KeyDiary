@@ -5,6 +5,7 @@
 
 import AppKit
 import ApplicationServices
+import Darwin
 
 /// Passively observes keyboard and primary mouse-button events in the current login session.
 @MainActor
@@ -41,11 +42,11 @@ final class QuartzKeyboardMonitor {
 
     private var keyboardTap: TapState?
     private var systemKeyTap: TapState?
-    private let onEvent: (NSEvent) -> Void
+    private let onEvent: (NSEvent, Bool) -> Void
     private let onReset: () -> Void
 
     init(
-        onEvent: @escaping (NSEvent) -> Void,
+        onEvent: @escaping (NSEvent, Bool) -> Void,
         onReset: @escaping () -> Void = {}
     ) {
         self.onEvent = onEvent
@@ -122,9 +123,9 @@ final class QuartzKeyboardMonitor {
         CFRunLoopRemoveSource(CFRunLoopGetMain(), tap.runLoopSource, .commonModes)
     }
 
-    private func handle(_ event: CGEvent) {
+    private func handle(_ event: CGEvent, targetsCurrentProcess: Bool) {
         guard let appKitEvent = NSEvent(cgEvent: event) else { return }
-        onEvent(appKitEvent)
+        onEvent(appKitEvent, targetsCurrentProcess)
     }
 
     private func reenableAfterSystemDisable() {
@@ -144,12 +145,23 @@ final class QuartzKeyboardMonitor {
         guard let context else { return Unmanaged.passUnretained(event) }
         let monitor = Unmanaged<QuartzKeyboardMonitor>.fromOpaque(context).takeUnretainedValue()
         let mainRunLoopEvent = MainRunLoopEvent(value: event)
+        let targetsCurrentProcess = event.getIntegerValueField(.eventTargetUnixProcessID)
+            == Int64(getpid())
 
-        MainActor.assumeIsolated {
-            if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            MainActor.assumeIsolated {
                 monitor.reenableAfterSystemDisable()
-            } else {
-                monitor.handle(mainRunLoopEvent.value)
+            }
+        } else {
+            // Return the passive tap event before publishing observable state.
+            // Updating SwiftUI synchronously here can rebuild a control between
+            // mouseDown and mouseUp, preventing buttons (notably alert buttons)
+            // from completing their click tracking.
+            DispatchQueue.main.async {
+                monitor.handle(
+                    mainRunLoopEvent.value,
+                    targetsCurrentProcess: targetsCurrentProcess
+                )
             }
         }
 

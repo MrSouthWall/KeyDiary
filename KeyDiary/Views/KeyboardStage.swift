@@ -100,16 +100,12 @@ private extension KeyboardPixel {
     }
 }
 
-private func keyboardKeycapGradient(
-    pressed: Bool,
+private func keyboardKeycapBaseGradient(
     pixelColor: KeyboardPixel?,
-    themeColor: Color,
     colorScheme: ColorScheme
 ) -> LinearGradient {
     let colors: [Color]
-    if pressed {
-        colors = [themeColor.opacity(0.78), themeColor]
-    } else if let pixelColor {
+    if let pixelColor {
         colors = pixelColor.keycapGradientColors
     } else if colorScheme == .dark {
         colors = [Color(white: 0.16), Color(white: 0.09)]
@@ -119,6 +115,37 @@ private func keyboardKeycapGradient(
 
     return LinearGradient(
         colors: colors,
+        startPoint: .top,
+        endPoint: .bottom
+    )
+}
+
+private func keyboardKeycapTintGradient(
+    themeColor: Color,
+    intensity: Double
+) -> LinearGradient {
+    let intensity = min(max(intensity, 0), 1)
+
+    return LinearGradient(
+        stops: [
+            .init(color: themeColor.opacity(0.42 * intensity), location: 0),
+            .init(color: themeColor.opacity(0.68 * intensity), location: 0.5),
+            .init(color: themeColor.opacity(0.94 * intensity), location: 1)
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+    )
+}
+
+private func keyboardKeycapGlossGradient(intensity: Double) -> LinearGradient {
+    let intensity = min(max(intensity, 0), 1)
+
+    return LinearGradient(
+        stops: [
+            .init(color: Color.white.opacity(0.2 * intensity), location: 0),
+            .init(color: Color.white.opacity(0.05 * intensity), location: 0.34),
+            .init(color: Color.clear, location: 0.58)
+        ],
         startPoint: .top,
         endPoint: .bottom
     )
@@ -155,7 +182,7 @@ private func keyboardKeycapForeground(
 }
 
 private func keyboardHeatOverlayOpacity(_ heat: Double) -> Double {
-    0.14 + heat * 0.48
+    heat
 }
 
 struct KeyboardStage: View {
@@ -467,6 +494,9 @@ private struct ArrowKeyHalfStyle: ButtonStyle {
             fallback: colorScheme
         )
         let keycapPixel = pixelColorMode == .binary ? nil : pixelColor?.keycapColor
+        let tintIntensity = pressed
+            ? 1
+            : (pixelColor == nil ? keyboardHeatOverlayOpacity(heat) : 0)
 
         configuration.label
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -480,17 +510,24 @@ private struct ArrowKeyHalfStyle: ButtonStyle {
 
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .fill(
-                            keyboardKeycapGradient(
-                                pressed: pressed,
+                            keyboardKeycapBaseGradient(
                                 pixelColor: keycapPixel,
-                                themeColor: themeColor,
                                 colorScheme: appearanceColorScheme
                             )
                         )
                         .overlay {
-                            if pixelColor == nil, !pressed, heat > 0 {
+                            if tintIntensity > 0 {
                                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                                    .fill(themeColor.opacity(keyboardHeatOverlayOpacity(heat)))
+                                    .fill(
+                                        keyboardKeycapTintGradient(
+                                            themeColor: themeColor,
+                                            intensity: tintIntensity
+                                        )
+                                    )
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                                            .fill(keyboardKeycapGlossGradient(intensity: tintIntensity))
+                                    }
                             }
                         }
                         .overlay {
@@ -870,6 +907,9 @@ private struct ThreeDimensionalKeyStyle: ButtonStyle {
             fallback: colorScheme
         )
         let keycapPixel = pixelColorMode == .binary ? nil : pixelColor?.keycapColor
+        let tintIntensity = pressed
+            ? 1
+            : (pixelColor == nil ? keyboardHeatOverlayOpacity(heat) : 0)
 
         configuration.label
             .background {
@@ -882,17 +922,24 @@ private struct ThreeDimensionalKeyStyle: ButtonStyle {
 
                     UnevenRoundedRectangle(cornerRadii: cornerRadii, style: .continuous)
                         .fill(
-                            keyboardKeycapGradient(
-                                pressed: pressed,
+                            keyboardKeycapBaseGradient(
                                 pixelColor: keycapPixel,
-                                themeColor: themeColor,
                                 colorScheme: appearanceColorScheme
                             )
                         )
                         .overlay {
-                            if pixelColor == nil, !pressed, heat > 0 {
+                            if tintIntensity > 0 {
                                 UnevenRoundedRectangle(cornerRadii: cornerRadii, style: .continuous)
-                                    .fill(themeColor.opacity(keyboardHeatOverlayOpacity(heat)))
+                                    .fill(
+                                        keyboardKeycapTintGradient(
+                                            themeColor: themeColor,
+                                            intensity: tintIntensity
+                                        )
+                                    )
+                                    .overlay {
+                                        UnevenRoundedRectangle(cornerRadii: cornerRadii, style: .continuous)
+                                            .fill(keyboardKeycapGlossGradient(intensity: tintIntensity))
+                                    }
                             }
                         }
                         .overlay {

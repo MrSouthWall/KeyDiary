@@ -648,7 +648,7 @@ private struct ApplicationMenu: View {
         } label: {
             StatusBarOptionLabel(
                 caption: "App",
-                value: applicationTitle(store.selectedApplication),
+                value: applicationTitle(store.applicationFilterTitle),
                 systemImage: "app.dashed",
                 tint: tint,
                 width: 132
@@ -656,28 +656,48 @@ private struct ApplicationMenu: View {
         }
         .buttonStyle(StatusBarOptionButtonStyle())
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-            StatusSelectionPanel(title: "选择 App", systemImage: "app.dashed") {
+            StatusSelectionPanel(title: "选择 App（可多选）", systemImage: "app.dashed") {
                 ScrollView {
                     LazyVStack(spacing: 3) {
                         ForEach(store.applications, id: \.self) { application in
                             StatusSelectionRow(
                                 title: applicationTitle(application),
-                                isSelected: store.selectedApplication == application
+                                isSelected: store.isApplicationSelected(application)
                             ) {
-                                store.selectedApplication = application
-                                isPresented = false
+                                store.toggleApplicationSelection(application)
                             }
                         }
                     }
                 }
                 .frame(maxHeight: 280)
+
+                Divider()
+                    .padding(.vertical, 3)
+
+                HStack {
+                    Text(store.applicationFilterTitle == "All apps"
+                         ? L10n.text("全部 App")
+                         : L10n.format("已选择 %@", applicationTitle(store.applicationFilterTitle)))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    Spacer()
+
+                    Button("完成") {
+                        isPresented = false
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+                .padding(.horizontal, 8)
             }
-            .frame(width: 238)
+            .frame(width: 258)
         }
         .fixedSize()
         .help("筛选 App")
         .accessibilityLabel(
-            L10n.format("App 筛选，%@", applicationTitle(store.selectedApplication))
+            L10n.format("App 筛选，%@", applicationTitle(store.applicationFilterTitle))
         )
     }
 

@@ -241,11 +241,54 @@ final class KeyDiaryStoreTests: XCTestCase {
         ])
         let store = KeyDiaryStore(database: database, now: now)
 
-        store.selectedApplication = "Safari"
+        store.toggleApplicationSelection("Safari")
 
         XCTAssertEqual(store.applications, ["All apps", "Notes", "Safari"])
         XCTAssertEqual(store.filteredRecordCount, 1)
         XCTAssertEqual(store.filteredKeyCounts, [1: 1])
+    }
+
+    func testMultipleApplicationFilterAggregatesSelectedApps() throws {
+        let now = Date()
+        let database = try makeDatabase()
+        _ = try database.insert([
+            makeRecord(at: now, keyCode: 0, key: "A", application: "Notes"),
+            makeRecord(at: now.addingTimeInterval(1), keyCode: 0, key: "A", application: "Safari"),
+            makeRecord(at: now.addingTimeInterval(2), keyCode: 1, key: "S", application: "Safari"),
+            makeRecord(at: now.addingTimeInterval(3), keyCode: 2, key: "D", application: "Xcode")
+        ])
+        try database.insert([
+            makeMouseClick(at: now, button: .left, application: "Notes"),
+            makeMouseClick(at: now.addingTimeInterval(1), button: .right, application: "Safari"),
+            makeMouseClick(at: now.addingTimeInterval(2), button: .left, application: "Xcode")
+        ])
+        let store = KeyDiaryStore(database: database, now: now.addingTimeInterval(3))
+
+        store.toggleApplicationSelection("Notes")
+        store.toggleApplicationSelection("Safari")
+
+        XCTAssertEqual(store.selectedApplications, Set(["Notes", "Safari"]))
+        XCTAssertEqual(store.filteredRecordCount, 3)
+        XCTAssertEqual(store.filteredKeyCounts, [0: 2, 1: 1])
+        XCTAssertEqual(store.filteredMouseClickCounts, MouseClickCounts(left: 1, right: 1))
+        XCTAssertEqual(store.applicationFilterTitle, L10n.format("%lld 个 App", Int64(2)))
+    }
+
+    func testDeselectingLastApplicationRestoresAllApps() throws {
+        let now = Date()
+        let database = try makeDatabase()
+        _ = try database.insert([
+            makeRecord(at: now, keyCode: 0, key: "A", application: "Notes"),
+            makeRecord(at: now, keyCode: 1, key: "S", application: "Safari")
+        ])
+        let store = KeyDiaryStore(database: database, now: now)
+
+        store.toggleApplicationSelection("Safari")
+        store.toggleApplicationSelection("Safari")
+
+        XCTAssertTrue(store.selectsAllApplications)
+        XCTAssertEqual(store.filteredRecordCount, 2)
+        XCTAssertEqual(store.filteredKeyCounts, [0: 1, 1: 1])
     }
 
     func testMouseClickCountsUseDateAndApplicationFilters() throws {
@@ -267,7 +310,7 @@ final class KeyDiaryStoreTests: XCTestCase {
         XCTAssertEqual(store.filteredMouseClickCounts, MouseClickCounts(left: 2, right: 1))
         XCTAssertEqual(store.applications, ["All apps", "Notes", "Safari"])
 
-        store.selectedApplication = "Safari"
+        store.toggleApplicationSelection("Safari")
 
         XCTAssertEqual(store.filteredMouseClickCounts, MouseClickCounts(left: 2, right: 0))
 
@@ -648,6 +691,38 @@ final class KeyDiaryStoreTests: XCTestCase {
         XCTAssertEqual(try allRecords(in: database), [safari])
     }
 
+    func testDeletingDateRangeRemovesAllMatchingKeysButKeepsOtherKeysAndMouseClicks() throws {
+        let database = try makeDatabase()
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let before = makeRecord(at: start.addingTimeInterval(-1), keyCode: 0, key: "A")
+        let lowerBoundary = makeRecord(at: start, keyCode: 1, key: "S", application: "Notes")
+        let inside = makeRecord(at: start.addingTimeInterval(1), keyCode: 2, key: "D", application: "Safari")
+        let upperBoundary = makeRecord(at: start.addingTimeInterval(2), keyCode: 3, key: "F")
+        let after = makeRecord(at: start.addingTimeInterval(3), keyCode: 4, key: "G")
+        _ = try database.insert([before, lowerBoundary, inside, upperBoundary, after])
+        try database.insert([
+            makeMouseClick(at: start.addingTimeInterval(1), button: .left, application: "Notes")
+        ])
+        let store = KeyDiaryStore(database: database, now: start.addingTimeInterval(3))
+        store.selectAllRecords(now: start.addingTimeInterval(3))
+
+        XCTAssertEqual(
+            try store.keyPressRecordCount(from: start, to: start.addingTimeInterval(2)),
+            3
+        )
+
+        let deleted = try store.deleteKeyPressRecords(
+            from: start.addingTimeInterval(2),
+            to: start
+        )
+
+        XCTAssertEqual(deleted, 3)
+        XCTAssertEqual(store.recordCount, 2)
+        XCTAssertEqual(store.mouseClickRecordCount, 1)
+        XCTAssertEqual(try allRecords(in: database), [before, after])
+        XCTAssertEqual(try database.mouseClickCount(), 1)
+    }
+
     func testLegacyJSONMigratesOnceAndKeepsBackup() throws {
         let folder = try makeTemporaryFolder()
         let legacyURL = folder.appendingPathComponent("key-presses.json")
@@ -678,20 +753,139 @@ final class KeyDiaryStoreTests: XCTestCase {
                 bundleIdentifier: nil
             )
         ]
+        let mouseClicks = [
+            makeMouseClick(at: timestamp.addingTimeInterval(3), button: .left, application: "Notes"),
+            makeMouseClick(at: timestamp.addingTimeInterval(4), button: .right, application: "Safari")
+        ]
         _ = try source.insert(records)
+        try source.insert(mouseClicks)
         let service = DataTransferService()
         let folder = try makeTemporaryFolder()
 
         for format in DataTransferFormat.allCases {
             let url = folder.appendingPathComponent("round-trip.\(format.filenameExtension)")
             let exportResult = try service.export(format: format, to: url, database: source)
-            XCTAssertEqual(exportResult.exported, records.count, "Format: \(format)")
+            XCTAssertEqual(exportResult.exported, records.count + mouseClicks.count, "Format: \(format)")
 
             let destination = try makeDatabase()
             let importResult = try service.importRecords(from: url, mode: .merge, database: destination)
-            XCTAssertEqual(importResult.inserted, records.count, "Format: \(format)")
+            XCTAssertEqual(importResult.inserted, records.count + mouseClicks.count, "Format: \(format)")
             XCTAssertEqual(try allRecords(in: destination), records, "Format: \(format)")
+            XCTAssertEqual(try allMouseClicks(in: destination), mouseClicks, "Format: \(format)")
         }
+    }
+
+    func testJSONBackupRoundTripIncludesMouseClicks() throws {
+        let source = try makeDatabase()
+        let timestamp = Date(timeIntervalSince1970: 1_800_000_000.125)
+        let keyPress = makeRecord(at: timestamp, keyCode: 0, key: "A", application: "Notes")
+        let mouseClicks = [
+            makeMouseClick(at: timestamp.addingTimeInterval(1), button: .left, application: "Notes"),
+            makeMouseClick(at: timestamp.addingTimeInterval(2), button: .right, application: "Safari")
+        ]
+        _ = try source.insert([keyPress])
+        try source.insert(mouseClicks)
+
+        let folder = try makeTemporaryFolder()
+        let url = folder.appendingPathComponent("complete-backup.json")
+        let service = DataTransferService()
+        let exportResult = try service.export(format: .json, to: url, database: source)
+
+        XCTAssertEqual(exportResult.exported, 3)
+
+        let destination = try makeDatabase()
+        _ = try destination.insert([
+            makeRecord(at: timestamp.addingTimeInterval(-1), keyCode: 1, key: "S")
+        ])
+        try destination.insert([
+            makeMouseClick(at: timestamp.addingTimeInterval(-1), button: .left, application: "Xcode")
+        ])
+
+        let importResult = try service.importRecords(from: url, mode: .replace, database: destination)
+
+        XCTAssertEqual(importResult, DataImportResult(inserted: 3, duplicates: 0, total: 3))
+        XCTAssertEqual(try allRecords(in: destination), [keyPress])
+        XCTAssertEqual(try allMouseClicks(in: destination), mouseClicks)
+    }
+
+    func testMouseOnlyDataCanBeExported() throws {
+        let database = try makeDatabase()
+        let mouseClick = makeMouseClick(
+            at: Date(timeIntervalSince1970: 1_800_000_000.125),
+            button: .left,
+            application: "Notes"
+        )
+        try database.insert([mouseClick])
+        let store = KeyDiaryStore(database: database)
+
+        XCTAssertEqual(store.recordCount, 0)
+        XCTAssertEqual(store.mouseClickRecordCount, 1)
+        XCTAssertTrue(store.hasExportableData)
+
+        let service = DataTransferService()
+        let folder = try makeTemporaryFolder()
+        for format in DataTransferFormat.allCases {
+            let url = folder.appendingPathComponent("mouse-only.\(format.filenameExtension)")
+            let exportResult = try service.export(format: format, to: url, database: database)
+
+            XCTAssertEqual(exportResult.exported, 1, "Format: \(format)")
+
+            let restoredDatabase = try makeDatabase()
+            let importResult = try service.importRecords(
+                from: url,
+                mode: .replace,
+                database: restoredDatabase
+            )
+
+            XCTAssertEqual(
+                importResult,
+                DataImportResult(inserted: 1, duplicates: 0, total: 1),
+                "Format: \(format)"
+            )
+            XCTAssertEqual(try allRecords(in: restoredDatabase), [], "Format: \(format)")
+            XCTAssertEqual(try allMouseClicks(in: restoredDatabase), [mouseClick], "Format: \(format)")
+        }
+    }
+
+    func testVersionOneJSONBackupStillImports() throws {
+        let database = try makeDatabase()
+        let id = UUID()
+        let folder = try makeTemporaryFolder()
+        let url = folder.appendingPathComponent("version-one-backup.json")
+        let json = """
+        {
+          "formatVersion": 1,
+          "exportedAt": "2027-01-15T08:00:00.000Z",
+          "records": [
+            {
+              "id": "\(id.uuidString.lowercased())",
+              "timestamp": "2027-01-15T08:00:00.125Z",
+              "keyCode": 0,
+              "key": "A",
+              "applicationName": "Notes",
+              "bundleIdentifier": "com.example.notes"
+            }
+          ]
+        }
+        """
+        try Data(json.utf8).write(to: url)
+
+        let result = try DataTransferService().importRecords(from: url, mode: .merge, database: database)
+
+        XCTAssertEqual(result, DataImportResult(inserted: 1, duplicates: 0, total: 1))
+        XCTAssertEqual(
+            try allRecords(in: database),
+            [
+                KeyPressRecord(
+                    id: id,
+                    timestamp: Date(timeIntervalSince1970: 1_800_000_000.125),
+                    keyCode: 0,
+                    key: "A",
+                    applicationName: "Notes",
+                    bundleIdentifier: "com.example.notes"
+                )
+            ]
+        )
     }
 
     func testXLSXPackageIncludesRootRelationship() throws {
@@ -731,6 +925,12 @@ final class KeyDiaryStoreTests: XCTestCase {
             key: "A"
         )
         _ = try database.insert([existing])
+        let existingMouseClick = makeMouseClick(
+            at: existing.timestamp.addingTimeInterval(1),
+            button: .right,
+            application: "Notes"
+        )
+        try database.insert([existingMouseClick])
         let folder = try makeTemporaryFolder()
         let csvURL = folder.appendingPathComponent("invalid.csv")
         let csv = """
@@ -744,6 +944,7 @@ final class KeyDiaryStoreTests: XCTestCase {
             try DataTransferService().importRecords(from: csvURL, mode: .replace, database: database)
         )
         XCTAssertEqual(try allRecords(in: database), [existing])
+        XCTAssertEqual(try allMouseClicks(in: database), [existingMouseClick])
     }
 
     func testRecorderTracksMultipleKeysUntilEachKeyIsReleased() throws {
@@ -783,6 +984,28 @@ final class KeyDiaryStoreTests: XCTestCase {
         XCTAssertTrue(pressedButtons.isEmpty)
 
         XCTAssertEqual(buttons, [.left, .right])
+    }
+
+    func testRecorderDefersCurrentProcessMouseClickUntilMouseUp() throws {
+        let recorder = KeyboardRecorder()
+        var buttons: [MouseButton] = []
+        var pressedButtonUpdates: [Set<MouseButton>] = []
+        recorder.onMouseClick = { buttons.append($0.button) }
+        recorder.onPressedMouseButtonsChanged = { pressedButtonUpdates.append($0) }
+
+        recorder.handle(
+            try makeMouseEvent(type: .leftMouseDown),
+            targetsCurrentProcess: true
+        )
+        XCTAssertTrue(buttons.isEmpty)
+        XCTAssertTrue(pressedButtonUpdates.isEmpty)
+
+        recorder.handle(
+            try makeMouseEvent(type: .leftMouseUp),
+            targetsCurrentProcess: true
+        )
+        XCTAssertEqual(buttons, [.left])
+        XCTAssertTrue(pressedButtonUpdates.isEmpty)
     }
 
     func testRepeatedKeyDownStaysPressedUntilKeyUp() throws {
@@ -898,6 +1121,12 @@ final class KeyDiaryStoreTests: XCTestCase {
     private func allRecords(in database: KeyDiaryDatabase) throws -> [KeyPressRecord] {
         var records: [KeyPressRecord] = []
         try database.forEachRecord { records.append($0) }
+        return records
+    }
+
+    private func allMouseClicks(in database: KeyDiaryDatabase) throws -> [MouseClickRecord] {
+        var records: [MouseClickRecord] = []
+        try database.forEachMouseClickRecord { records.append($0) }
         return records
     }
 

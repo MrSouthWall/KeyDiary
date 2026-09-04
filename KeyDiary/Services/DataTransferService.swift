@@ -67,6 +67,7 @@ private nonisolated struct TransferEnvelope: Codable {
     let formatVersion: Int
     let exportedAt: String
     let records: [TransferRecord]
+    let mouseClicks: [TransferMouseClick]?
 }
 
 private nonisolated struct TransferRecord: Codable {
@@ -78,9 +79,23 @@ private nonisolated struct TransferRecord: Codable {
     let bundleIdentifier: String?
 }
 
+private nonisolated struct TransferMouseClick: Codable {
+    let id: String
+    let timestamp: String
+    let button: Int
+    let applicationName: String
+    let bundleIdentifier: String?
+}
+
+private nonisolated enum TabularInputRecord {
+    case keyPress(KeyPressRecord)
+    case mouseClick(MouseClickRecord)
+}
+
 nonisolated final class DataTransferService: @unchecked Sendable {
     private static let headers = [
-        "id", "timestamp", "keyCode", "key", "applicationName", "bundleIdentifier"
+        "recordType", "id", "timestamp", "keyCode", "key", "mouseButton",
+        "applicationName", "bundleIdentifier"
     ]
     private static let excelMaximumDataRows = 1_048_575
 
@@ -143,14 +158,26 @@ nonisolated final class DataTransferService: @unchecked Sendable {
             if accessed { url.stopAccessingSecurityScopedResource() }
         }
 
-        return try database.importRecords(mode: mode) { [self] receive in
+        return try database.importInputs(mode: mode) { [self] receiveKeyPress, receiveMouseClick in
             switch format {
             case .json:
-                try readJSON(from: url, receive: receive)
+                try readJSON(
+                    from: url,
+                    receiveKeyPress: receiveKeyPress,
+                    receiveMouseClick: receiveMouseClick
+                )
             case .csv:
-                try readCSV(from: url, receive: receive)
+                try readCSV(
+                    from: url,
+                    receiveKeyPress: receiveKeyPress,
+                    receiveMouseClick: receiveMouseClick
+                )
             case .xlsx:
-                try readXLSX(from: url, receive: receive)
+                try readXLSX(
+                    from: url,
+                    receiveKeyPress: receiveKeyPress,
+                    receiveMouseClick: receiveMouseClick
+                )
             }
         }
     }
@@ -188,7 +215,7 @@ nonisolated final class DataTransferService: @unchecked Sendable {
 
         let exportedAt = timestampFormatter.string(from: .now)
         try handle.write(contentsOf: Data(
-            "{\n  \"formatVersion\": 1,\n  \"exportedAt\": \"\(exportedAt)\",\n  \"records\": [\n"
+            "{\n  \"formatVersion\": 2,\n  \"exportedAt\": \"\(exportedAt)\",\n  \"records\": [\n"
                 .utf8
         ))
 
@@ -204,7 +231,19 @@ nonisolated final class DataTransferService: @unchecked Sendable {
             try handle.write(contentsOf: data)
             count += 1
         }
+        try handle.write(contentsOf: Data("\n  ],\n  \"mouseClicks\": [\n".utf8))
+        var mouseClickCount = 0
+        try database.forEachMouseClickRecord(query: query) { [self] record in
+            if mouseClickCount > 0 {
+                try handle.write(contentsOf: Data(",\n".utf8))
+            }
+            let data = try encoder.encode(transferMouseClick(from: record))
+            try handle.write(contentsOf: Data("    ".utf8))
+            try handle.write(contentsOf: data)
+            mouseClickCount += 1
+        }
         try handle.write(contentsOf: Data("\n  ]\n}\n".utf8))
+        count += mouseClickCount
         return count
     }
 
@@ -226,6 +265,10 @@ nonisolated final class DataTransferService: @unchecked Sendable {
             try writeCSVRow(csvFields(for: record), to: handle)
             count += 1
         }
+        try database.forEachMouseClickRecord(query: query) { [self] record in
+            try writeCSVRow(csvFields(for: record), to: handle)
+            count += 1
+        }
         return count
     }
 
@@ -240,7 +283,9 @@ nonisolated final class DataTransferService: @unchecked Sendable {
         try fileManager.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: temporaryRoot) }
 
-        let total = try database.count(query: query)
+        let keyPressTotal = try database.count(query: query)
+        let mouseClickTotal = try database.mouseClickCount(query: query)
+        let total = keyPressTotal + mouseClickTotal
         let sheetCount = max(Int(ceil(Double(total) / Double(Self.excelMaximumDataRows))), 1)
         try createWorkbookScaffold(at: temporaryRoot, sheetCount: sheetCount)
 
@@ -251,7 +296,7 @@ nonisolated final class DataTransferService: @unchecked Sendable {
             headers: Self.headers
         )
 
-        try database.forEachRecord(query: query) { [self] record in
+        let appendFields: ([String]) throws -> Void = { [self] fields in
             if rowInSheet > Self.excelMaximumDataRows {
                 try writer.finish()
                 sheetIndex += 1
@@ -261,8 +306,14 @@ nonisolated final class DataTransferService: @unchecked Sendable {
                     headers: Self.headers
                 )
             }
-            try writer.append(fields(for: record))
+            try writer.append(fields)
             rowInSheet += 1
+        }
+        try database.forEachRecord(query: query) { [self] record in
+            try appendFields(fields(for: record))
+        }
+        try database.forEachMouseClickRecord(query: query) { [self] record in
+            try appendFields(fields(for: record))
         }
         try writer.finish()
 
@@ -277,15 +328,25 @@ nonisolated final class DataTransferService: @unchecked Sendable {
         return total
     }
 
-    private func readJSON(from url: URL, receive: KeyDiaryDatabase.RecordReceiver) throws {
+    private func readJSON(
+        from url: URL,
+        receiveKeyPress: KeyDiaryDatabase.RecordReceiver,
+        receiveMouseClick: KeyDiaryDatabase.MouseClickRecordReceiver
+    ) throws {
         let data = try Data(contentsOf: url, options: .mappedIfSafe)
         let decoder = JSONDecoder()
         if let envelope = try? decoder.decode(TransferEnvelope.self, from: data) {
-            guard envelope.formatVersion == 1 else {
+            guard envelope.formatVersion == 1 || envelope.formatVersion == 2 else {
                 throw DataTransferError.invalidFile(L10n.text("JSON 格式版本不受支持。"))
             }
+            guard envelope.formatVersion == 1 || envelope.mouseClicks != nil else {
+                throw DataTransferError.invalidFile(L10n.text("JSON 结构或字段不正确。"))
+            }
             for record in envelope.records {
-                try receive(try keyPressRecord(from: record))
+                try receiveKeyPress(try keyPressRecord(from: record))
+            }
+            for record in envelope.mouseClicks ?? [] {
+                try receiveMouseClick(try mouseClickRecord(from: record))
             }
             return
         }
@@ -295,14 +356,18 @@ nonisolated final class DataTransferService: @unchecked Sendable {
         do {
             let legacyRecords = try legacyDecoder.decode([KeyPressRecord].self, from: data)
             for record in legacyRecords {
-                try receive(record)
+                try receiveKeyPress(record)
             }
         } catch {
             throw DataTransferError.invalidFile(L10n.text("JSON 结构或字段不正确。"))
         }
     }
 
-    private func readCSV(from url: URL, receive: KeyDiaryDatabase.RecordReceiver) throws {
+    private func readCSV(
+        from url: URL,
+        receiveKeyPress: KeyDiaryDatabase.RecordReceiver,
+        receiveMouseClick: KeyDiaryDatabase.MouseClickRecordReceiver
+    ) throws {
         let stream = try CSVRowStream(url: url)
         var headerMap: [String: Int]?
         var rowNumber = 0
@@ -315,10 +380,15 @@ nonisolated final class DataTransferService: @unchecked Sendable {
             }
             guard !row.allSatisfy({ $0.isEmpty }) else { return }
             do {
-                try receive(try record(
+                let input = try tabularInputRecord(
                     from: row.map(removeCSVFormulaProtection),
                     headerMap: headerMap!
-                ))
+                )
+                try receive(
+                    input,
+                    receiveKeyPress: receiveKeyPress,
+                    receiveMouseClick: receiveMouseClick
+                )
             } catch {
                 throw DataTransferError.invalidFile(
                     L10n.format("CSV 第 %lld 行无效：%@", Int64(rowNumber), error.localizedDescription)
@@ -332,7 +402,8 @@ nonisolated final class DataTransferService: @unchecked Sendable {
 
     private func readXLSX(
         from url: URL,
-        receive: @escaping KeyDiaryDatabase.RecordReceiver
+        receiveKeyPress: @escaping KeyDiaryDatabase.RecordReceiver,
+        receiveMouseClick: @escaping KeyDiaryDatabase.MouseClickRecordReceiver
     ) throws {
         let archive: Archive
         do {
@@ -369,10 +440,14 @@ nonisolated final class DataTransferService: @unchecked Sendable {
             let parser = WorksheetRecordParser(
                 sharedStrings: sharedStrings,
                 makeHeaderMap: makeHeaderMap,
-                makeRecord: { [self] row, headerMap in
-                    try record(from: row, headerMap: headerMap)
-                },
-                receive: receive
+                processRow: { [self] row, headerMap in
+                    let input = try tabularInputRecord(from: row, headerMap: headerMap)
+                    try receive(
+                        input,
+                        receiveKeyPress: receiveKeyPress,
+                        receiveMouseClick: receiveMouseClick
+                    )
+                }
             )
             do {
                 try parser.parse(url: sheetURL)
@@ -416,24 +491,67 @@ nonisolated final class DataTransferService: @unchecked Sendable {
         )
     }
 
+    private func transferMouseClick(from record: MouseClickRecord) -> TransferMouseClick {
+        TransferMouseClick(
+            id: record.id.uuidString.lowercased(),
+            timestamp: timestampFormatter.string(from: record.timestamp),
+            button: record.button.rawValue,
+            applicationName: record.applicationName,
+            bundleIdentifier: record.bundleIdentifier
+        )
+    }
+
+    private func mouseClickRecord(from record: TransferMouseClick) throws -> MouseClickRecord {
+        guard let id = UUID(uuidString: record.id) else {
+            throw DataTransferError.invalidFile(L10n.text("记录 ID 不是有效 UUID。"))
+        }
+        guard let timestamp = parseTimestamp(record.timestamp) else {
+            throw DataTransferError.invalidFile(L10n.text("记录时间不是有效 ISO 8601 时间。"))
+        }
+        guard let button = MouseButton(rawValue: record.button) else {
+            throw DataTransferError.invalidFile(L10n.text("鼠标按键类型无效。"))
+        }
+        return MouseClickRecord(
+            id: id,
+            timestamp: timestamp,
+            button: button,
+            applicationName: record.applicationName,
+            bundleIdentifier: record.bundleIdentifier
+        )
+    }
+
     private func fields(for record: KeyPressRecord) -> [String] {
         [
+            "keyPress",
             record.id.uuidString.lowercased(),
             timestampFormatter.string(from: record.timestamp),
             String(record.keyCode),
             record.key,
+            "",
+            record.applicationName,
+            record.bundleIdentifier ?? ""
+        ]
+    }
+
+    private func fields(for record: MouseClickRecord) -> [String] {
+        [
+            "mouseClick",
+            record.id.uuidString.lowercased(),
+            timestampFormatter.string(from: record.timestamp),
+            "",
+            "",
+            record.button == .left ? "left" : "right",
             record.applicationName,
             record.bundleIdentifier ?? ""
         ]
     }
 
     private func csvFields(for record: KeyPressRecord) -> [String] {
-        let values = fields(for: record)
-        return values.enumerated().map { index, value in
-            // UUID, timestamp and keyCode are controlled scalar fields. User/app text
-            // is protected against spreadsheet formula execution when CSV is opened.
-            index < 3 ? value : addCSVFormulaProtection(to: value)
-        }
+        fields(for: record).map { addCSVFormulaProtection(to: $0) }
+    }
+
+    private func csvFields(for record: MouseClickRecord) -> [String] {
+        fields(for: record).map { addCSVFormulaProtection(to: $0) }
     }
 
     private func addCSVFormulaProtection(to value: String) -> String {
@@ -453,7 +571,10 @@ nonisolated final class DataTransferService: @unchecked Sendable {
         return String(value.dropFirst())
     }
 
-    private func record(from row: [String], headerMap: [String: Int]) throws -> KeyPressRecord {
+    private func tabularInputRecord(
+        from row: [String],
+        headerMap: [String: Int]
+    ) throws -> TabularInputRecord {
         func value(_ header: String) -> String {
             guard let index = headerMap[header], row.indices.contains(index) else { return "" }
             return row[index]
@@ -465,19 +586,58 @@ nonisolated final class DataTransferService: @unchecked Sendable {
         guard let timestamp = parseTimestamp(value("timestamp")) else {
             throw DataTransferError.invalidFile(L10n.text("时间不是有效 ISO 8601 时间。"))
         }
-        guard let numericKeyCode = Int(value("keycode")),
-              let keyCode = UInt16(exactly: numericKeyCode) else {
-            throw DataTransferError.invalidFile(L10n.text("keyCode 超出范围。"))
+
+        let recordType = value("recordtype").trimmingCharacters(in: .whitespacesAndNewlines)
+        if recordType.isEmpty || recordType.lowercased() == "keypress" {
+            guard let numericKeyCode = Int(value("keycode")),
+                  let keyCode = UInt16(exactly: numericKeyCode) else {
+                throw DataTransferError.invalidFile(L10n.text("keyCode 超出范围。"))
+            }
+
+            return .keyPress(KeyPressRecord(
+                id: id,
+                timestamp: timestamp,
+                keyCode: keyCode,
+                key: value("key"),
+                applicationName: value("applicationname"),
+                bundleIdentifier: value("bundleidentifier").nilIfEmpty
+            ))
         }
 
-        return KeyPressRecord(
-            id: id,
-            timestamp: timestamp,
-            keyCode: keyCode,
-            key: value("key"),
-            applicationName: value("applicationname"),
-            bundleIdentifier: value("bundleidentifier").nilIfEmpty
-        )
+        if recordType.lowercased() == "mouseclick" {
+            let rawButton = value("mousebutton").trimmingCharacters(in: .whitespacesAndNewlines)
+            let button: MouseButton?
+            switch rawButton.lowercased() {
+            case "left", "0": button = .left
+            case "right", "1": button = .right
+            default: button = nil
+            }
+            guard let button else {
+                throw DataTransferError.invalidFile(L10n.text("鼠标按键类型无效。"))
+            }
+            return .mouseClick(MouseClickRecord(
+                id: id,
+                timestamp: timestamp,
+                button: button,
+                applicationName: value("applicationname"),
+                bundleIdentifier: value("bundleidentifier").nilIfEmpty
+            ))
+        }
+
+        throw DataTransferError.invalidFile(L10n.text("记录类型无效。"))
+    }
+
+    private func receive(
+        _ input: TabularInputRecord,
+        receiveKeyPress: KeyDiaryDatabase.RecordReceiver,
+        receiveMouseClick: KeyDiaryDatabase.MouseClickRecordReceiver
+    ) throws {
+        switch input {
+        case .keyPress(let record):
+            try receiveKeyPress(record)
+        case .mouseClick(let record):
+            try receiveMouseClick(record)
+        }
     }
 
     private func makeHeaderMap(_ row: [String]) throws -> [String: Int] {
@@ -489,7 +649,12 @@ nonisolated final class DataTransferService: @unchecked Sendable {
                 .lowercased()
             map[normalized] = index
         }
-        let required = ["id", "timestamp", "keycode", "key", "applicationname"]
+        var required = ["id", "timestamp", "applicationname"]
+        if map["recordtype"] == nil {
+            required.append(contentsOf: ["keycode", "key"])
+        } else {
+            required.append(contentsOf: ["keycode", "key", "mousebutton"])
+        }
         let missing = required.filter { map[$0] == nil }
         guard missing.isEmpty else {
             throw DataTransferError.invalidFile(
@@ -836,8 +1001,7 @@ private nonisolated final class SharedStringsParser: NSObject, XMLParserDelegate
 private nonisolated final class WorksheetRecordParser: NSObject, XMLParserDelegate {
     private let sharedStrings: [String]
     private let makeHeaderMap: ([String]) throws -> [String: Int]
-    private let makeRecord: ([String], [String: Int]) throws -> KeyPressRecord
-    private let receive: KeyDiaryDatabase.RecordReceiver
+    private let processRow: ([String], [String: Int]) throws -> Void
 
     private var currentRow: [Int: String] = [:]
     private var currentColumn = 0
@@ -851,13 +1015,11 @@ private nonisolated final class WorksheetRecordParser: NSObject, XMLParserDelega
     init(
         sharedStrings: [String],
         makeHeaderMap: @escaping ([String]) throws -> [String: Int],
-        makeRecord: @escaping ([String], [String: Int]) throws -> KeyPressRecord,
-        receive: @escaping KeyDiaryDatabase.RecordReceiver
+        processRow: @escaping ([String], [String: Int]) throws -> Void
     ) {
         self.sharedStrings = sharedStrings
         self.makeHeaderMap = makeHeaderMap
-        self.makeRecord = makeRecord
-        self.receive = receive
+        self.processRow = processRow
     }
 
     func parse(url: URL) throws {
@@ -924,7 +1086,7 @@ private nonisolated final class WorksheetRecordParser: NSObject, XMLParserDelega
                 if headerMap == nil {
                     headerMap = try makeHeaderMap(row)
                 } else if !row.allSatisfy({ $0.isEmpty }) {
-                    try receive(try makeRecord(row, headerMap!))
+                    try processRow(row, headerMap!)
                 }
             } catch {
                 capturedError = DataTransferError.invalidFile(

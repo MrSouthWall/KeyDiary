@@ -139,9 +139,13 @@
 "自定义" = "Custom";
 "自定义…" = "Custom…";
 "选择 App" = "Choose App";
+"选择 App（可多选）" = "Choose Apps";
 "筛选 App" = "Filter by app";
 "App 筛选，%@" = "App filter, %@";
 "全部 App" = "All Apps";
+"%lld 个 App" = "%lld Apps";
+"已选择 %@" = "Selected: %@";
+"完成" = "Done";
 "播放时长" = "Duration";
 "回放速度" = "Playback Speed";
 "预计播放时长" = "Estimated duration";
@@ -211,7 +215,7 @@
 "合并导入…" = "Merge Import…";
 "替换全部记录…" = "Replace All Records…";
 "导出…" = "Export…";
-"导出的文件包含按键与应用信息，请妥善保管。JSON、CSV 和 Excel 均可再次导入。" = "Exported files contain keystroke and app information. Store them securely. JSON, CSV, and Excel files can all be imported again.";
+"导出的文件包含按键、鼠标点击与应用信息，请妥善保管。JSON、CSV 和 Excel 均可再次导入。" = "Exported files contain keystroke, mouse click, and app information. Store them securely. JSON, CSV, and Excel files can all be imported again.";
 "清空后无法恢复。" = "Deleted records cannot be recovered.";
 "清除全部记录…" = "Delete All Records…";
 "清除全部记录？" = "Delete all records?";
@@ -283,10 +287,15 @@
 "只显示符合“%@”规则的记录。" = "Shows only records matching the “%@” rule.";
 "无法读取数据" = "Could Not Read Data";
 "已删除 %@ 条记录" = "Deleted %@ records";
+"已删除 %@ 条按键记录" = "Deleted %@ keystroke records";
 "无法删除记录" = "Could Not Delete Records";
 "删除选中的 %@ 条记录？" = "Delete %@ selected records?";
 "永久删除" = "Delete Permanently";
 "删除后无法撤销。只有当前明确选中的记录会被删除。" = "Deletion cannot be undone. Only the records currently selected will be deleted.";
+"%@ 至 %@" = "%@ to %@";
+"删除“%@”内的全部 %@ 条按键记录？" = "Delete all %2$@ keystroke records in “%1$@”?";
+"永久删除此时间范围" = "Delete This Range Permanently";
+"此操作只按时间范围删除全部按键记录，不受 App、搜索和问题筛选影响；鼠标点击记录会保留。删除后无法撤销。" = "This deletes every keystroke record in the time range, regardless of the app, search, and issue filters. Mouse click records are kept. This cannot be undone.";
 "刷新" = "Refresh";
 "从" = "From";
 "到" = "To";
@@ -304,6 +313,8 @@
 "上一页" = "Previous Page";
 "下一页" = "Next Page";
 "删除选中项…" = "Delete Selected…";
+"删除时间范围…" = "Delete Time Range…";
+"删除“%@”内的全部按键记录" = "Delete all keystroke records in “%@”";
 "请等待导入、导出或视频生成结束" = "Wait for the import, export, or video generation to finish";
 "永久删除选中的记录" = "Permanently delete the selected records";
 "（未标记 App）" = "(No App Name)";
@@ -314,7 +325,7 @@
 "选择 JSON、CSV 或 Excel 文件。导入前会校验全部记录。" = "Choose a JSON, CSV, or Excel file. All records are validated before import.";
 "导入" = "Import";
 "导出键盘日记数据" = "Export Key Diary Data";
-"导出的文件包含按键和应用信息，请妥善保管。" = "The exported file contains keystroke and app information. Store it securely.";
+"导出的文件包含按键、鼠标点击和应用信息，请妥善保管。" = "The exported file contains keystroke, mouse click, and app information. Store it securely.";
 "录制键盘回放视频" = "Record Keyboard Playback Video";
 "开始录制" = "Start Recording";
 "键盘日记-回放-%@.%@" = "KeyDiary-Playback-%@.%@";
@@ -339,6 +350,8 @@
 "Excel 工作表中没有键盘日记记录。" = "No Key Diary records were found in the Excel workbook.";
 "记录 ID 不是有效 UUID。" = "The record ID is not a valid UUID.";
 "记录时间不是有效 ISO 8601 时间。" = "The record timestamp is not valid ISO 8601.";
+"鼠标按键类型无效。" = "The mouse button type is invalid.";
+"记录类型无效。" = "The record type is invalid.";
 "ID 不是有效 UUID。" = "The ID is not a valid UUID.";
 "时间不是有效 ISO 8601 时间。" = "The timestamp is not valid ISO 8601.";
 "keyCode 超出范围。" = "keyCode is out of range.";

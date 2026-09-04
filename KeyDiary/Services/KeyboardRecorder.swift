@@ -14,13 +14,14 @@ final class KeyboardRecorder {
     private let keySoundPlayer = KeySoundPlayer()
     private var pressedKeys: [UInt16: String] = [:]
     private var pressedMouseButtons: Set<MouseButton> = []
+    private var pendingCurrentProcessMouseClicks: [MouseButton: MouseClickRecord] = [:]
     private var pressedModifierKeyCodes: Set<UInt16> = []
     private var capsLockFeedbackTask: Task<Void, Never>?
     private var recordsKeyPresses = false
     private(set) var isCapsLockEnabled = CGEventSource.flagsState(.combinedSessionState).contains(.maskAlphaShift)
     private lazy var quartzKeyboardMonitor = QuartzKeyboardMonitor(
-        onEvent: { [weak self] event in
-            self?.handleMonitoredEvent(event)
+        onEvent: { [weak self] event, targetsCurrentProcess in
+            self?.handleMonitoredEvent(event, targetsCurrentProcess: targetsCurrentProcess)
         },
         onReset: { [weak self] in
             self?.resetTransientState()
@@ -92,6 +93,7 @@ final class KeyboardRecorder {
         capsLockFeedbackTask?.cancel()
         capsLockFeedbackTask = nil
         pressedModifierKeyCodes.removeAll()
+        pendingCurrentProcessMouseClicks.removeAll()
         if !pressedKeys.isEmpty {
             pressedKeys.removeAll()
             onPressedKeysChanged?([:])
@@ -102,17 +104,17 @@ final class KeyboardRecorder {
         }
     }
 
-    private func handleMonitoredEvent(_ event: NSEvent) {
+    private func handleMonitoredEvent(_ event: NSEvent, targetsCurrentProcess: Bool) {
         guard recordsKeyPresses else {
             if event.type == .flagsChanged {
                 updateCapsLockState(event.modifierFlags.contains(.capsLock))
             }
             return
         }
-        handle(event)
+        handle(event, targetsCurrentProcess: targetsCurrentProcess)
     }
 
-    func handle(_ event: NSEvent) {
+    func handle(_ event: NSEvent, targetsCurrentProcess: Bool = false) {
         switch event.type {
         case .keyDown:
             guard event.keyCode != Self.capsLockKeyCode else { return }
@@ -156,18 +158,16 @@ final class KeyboardRecorder {
             }
 
         case .leftMouseDown:
-            setMouseButton(.left, pressed: true)
-            recordMouseClick(button: .left)
+            handleMouseDown(.left, targetsCurrentProcess: targetsCurrentProcess)
 
         case .leftMouseUp:
-            setMouseButton(.left, pressed: false)
+            handleMouseUp(.left)
 
         case .rightMouseDown:
-            setMouseButton(.right, pressed: true)
-            recordMouseClick(button: .right)
+            handleMouseDown(.right, targetsCurrentProcess: targetsCurrentProcess)
 
         case .rightMouseUp:
-            setMouseButton(.right, pressed: false)
+            handleMouseUp(.right)
 
         default:
             break
@@ -229,6 +229,27 @@ final class KeyboardRecorder {
         onPressedMouseButtonsChanged?(pressedMouseButtons)
     }
 
+    private func handleMouseDown(_ button: MouseButton, targetsCurrentProcess: Bool) {
+        if targetsCurrentProcess {
+            // Publishing the app's own mouseDown would rebuild SwiftUI while an
+            // AppKit control is still tracking the click. Preserve the click,
+            // but publish it only after mouseUp has completed its normal route.
+            pendingCurrentProcessMouseClicks[button] = makeMouseClickRecord(button: button)
+            return
+        }
+
+        setMouseButton(button, pressed: true)
+        recordMouseClick(button: button)
+    }
+
+    private func handleMouseUp(_ button: MouseButton) {
+        if let record = pendingCurrentProcessMouseClicks.removeValue(forKey: button) {
+            onMouseClick?(record)
+        } else {
+            setMouseButton(button, pressed: false)
+        }
+    }
+
     private func updateCapsLockState(_ isEnabled: Bool) {
         guard isCapsLockEnabled != isEnabled else { return }
         isCapsLockEnabled = isEnabled
@@ -255,13 +276,17 @@ final class KeyboardRecorder {
     }
 
     private func recordMouseClick(button: MouseButton) {
+        onMouseClick?(makeMouseClickRecord(button: button))
+    }
+
+    private func makeMouseClickRecord(button: MouseButton) -> MouseClickRecord {
         let application = NSWorkspace.shared.frontmostApplication
-        onMouseClick?(MouseClickRecord(
+        return MouseClickRecord(
             timestamp: .now,
             button: button,
             applicationName: application?.localizedName ?? "Unknown app",
             bundleIdentifier: application?.bundleIdentifier
-        ))
+        )
     }
 
 }
